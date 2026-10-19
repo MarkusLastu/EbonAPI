@@ -29,10 +29,19 @@ jobs:
             exit 1
           fi
 
-          mkdir -p dist/EbonAPI
-          cp -r EbonAPI/. dist/EbonAPI/
+          # Le zip contient EbonAPI et tous ses modules (EbonAPI-*) : tout dossier
+          # racine qui porte un .toc. Les modules restent optionnels pour le joueur
+          # (il peut ne garder que EbonAPI) ; la version est celle d'EbonAPI.
+          mkdir -p dist/pack
+          for d in */; do
+            d=${d%/}
+            if compgen -G "$d/*.toc" > /dev/null; then
+              cp -r "$d" dist/pack/
+              echo "  + $d"
+            fi
+          done
 
-          ( cd dist && zip -r "EbonAPI-${VERSION}.zip" EbonAPI )
+          ( cd dist/pack && zip -r "../EbonAPI-${VERSION}.zip" . )
 
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "ASSET=dist/EbonAPI-${VERSION}.zip" >> "$GITHUB_ENV"
