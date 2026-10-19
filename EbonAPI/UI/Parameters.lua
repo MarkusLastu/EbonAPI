@@ -6,10 +6,15 @@ local Catalog = EbonAPI.Catalog
 local Skins = EbonAPI.Skins
 local DB = EbonAPI.DB
 local Handle = EbonAPI.Handle
-local Lib = EbonAPI.Lib
 
 local pairs, ipairs, tostring, error, type = pairs, ipairs, tostring, error, type
 local format, concat = string.format, table.concat
+
+local Problems = EbonAPI.Problems
+
+Problems.declare("EbonAPI", "EBONAPI", {
+  ["PARAMETER.DROPPED"] = { class = "reparation", key = "parameter" },
+})
 
 local LIST = Catalog.PLAYER
 
@@ -67,7 +72,7 @@ local function held()
 
       if reason then
         values[name] = nil
-        Lib.report(format("EbonAPI: saved parameter dropped: %s", reason))
+        Problems.repaired("EbonAPI", "PARAMETER.DROPPED", { parameter = name, value = value, reason = reason }, value)
       end
     end
   end

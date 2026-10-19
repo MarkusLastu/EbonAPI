@@ -287,16 +287,19 @@ function Options.call(node, field, ...)
   return value
 end
 
-local function guarded(node, field)
-  local ok, value = pcall(Options.call, node, field)
-
-  if not ok then
-    Lib.report(value)
-
-    return nil
+local function settle(node, field, ok, ...)
+  if ok then
+    return ...
   end
 
-  return value
+  local path = concat(node.path, ".")
+
+  EbonAPI.Kit.fail("EBONAPI.KIT.CALLBACK_FAILED", (...), node.owner,
+    { element = path ~= "" and path or node.owner, callback = field, addon = node.owner })
+end
+
+local function guarded(node, field)
+  return settle(node, field, pcall(Options.call, node, field))
 end
 
 function Options.name(node)
@@ -423,15 +426,15 @@ function Options.values(node)
 end
 
 function Options.get(node)
-  return Options.call(node, "get")
+  return settle(node, "get", pcall(Options.call, node, "get"))
 end
 
 function Options.set(node, ...)
-  return Options.call(node, "set", ...)
+  return settle(node, "set", pcall(Options.call, node, "set", ...))
 end
 
 function Options.run(node)
-  return Options.call(node, "func")
+  return settle(node, "func", pcall(Options.call, node, "func"))
 end
 
 local function walk(node, needle, found)

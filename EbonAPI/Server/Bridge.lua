@@ -9,9 +9,12 @@ local Queue = EbonAPI.Queue
 local Listeners = EbonAPI.Listeners
 local Assembler = EbonAPI.Assembler
 local Handle = EbonAPI.Handle
+local Problems = EbonAPI.Problems
+local Opcodes = EbonAPI.Opcodes
+local CS, SS = EbonAPI.CS, EbonAPI.SS
 
-local type, tonumber, tostring, error, pairs = type, tonumber, tostring, error, pairs
-local match, byte, len = string.match, string.byte, string.len
+local type, tonumber, tostring, error, pairs, next = type, tonumber, tostring, error, pairs, next
+local match, byte, len, sub = string.match, string.byte, string.len, string.sub
 
 local PREFIX = "AAM0x9"
 local MAX_PAYLOAD = 240
@@ -19,6 +22,19 @@ local MAX_CHUNKS = 400
 local STREAM_TIMEOUT = 20
 local STREAM_SWEEP = 2
 local AT = 64
+local ANSWER_TIMEOUT = 10
+local ANSWER_TICK = "EbonAPI:answers"
+local ECHO_DISCOVERY = 530
+
+local ANSWERS = {
+  [CS.REFRESH_PERKS] = ECHO_DISCOVERY,
+  [CS.REFRESH_BUILDS] = SS.BUILD_LIST,
+}
+
+Problems.declare("EbonAPI", "EBONAPI", {
+  ["SERVER.NO_ANSWER"] = { class = "echec", key = "request" },
+  ["BRIDGE.DROPPED"] = { class = "rejet" },
+})
 
 Bridge.PREFIX = PREFIX
 Bridge.MAX_PAYLOAD = MAX_PAYLOAD
@@ -38,13 +54,22 @@ Bridge.seen = false
 Bridge.drops = { header = 0, bounds = 0, sender = 0, expired = 0 }
 
 local drops = Bridge.drops
+local waiting = {}
+
+local function drop(reason, opcode, sample, sender)
+  drops[reason] = drops[reason] + 1
+
+  Problems.reject("EbonAPI", "BRIDGE.DROPPED", {
+    reason = reason, opcode = opcode or "none", sample = sample and sub(sample, 1, 60), sender = sender,
+  })
+end
 
 local function now()
   return (GetTime and GetTime()) or 0
 end
 
 local streams = Assembler.new("EbonAPI:streams", STREAM_TIMEOUT, STREAM_SWEEP, MAX_CHUNKS, function(opcode, id, record)
-  drops.expired = drops.expired + 1
+  drop("expired", opcode, "stream " .. tostring(id) .. " " .. record.count .. "/" .. record.total)
   EbonAPI:Emit("STREAM_TIMEOUT", opcode, id, record.count, record.total)
 end)
 
@@ -104,6 +129,14 @@ local function complete(opcode, body, sender, distribution, at)
 
   Log.trace("recv", nil, opcode, len(body), at)
 
+  if waiting[opcode] then
+    waiting[opcode] = nil
+
+    if not next(waiting) then
+      Bus.untick(ANSWER_TICK)
+    end
+  end
+
   local list = listeners[opcode]
 
   if list then
@@ -117,7 +150,7 @@ local function ingest(payload, distribution, sender)
   local opcodeText, rest = match(payload, "^(%d+)\t?(.*)$")
 
   if not opcodeText then
-    drops.header = drops.header + 1
+    drop("header", nil, payload, sender)
     return
   end
 
@@ -139,7 +172,7 @@ local function ingest(payload, distribution, sender)
   local body, state = streams:add(opcode, id, tonumber(indexText, 16), tonumber(totalText, 16), slice, current)
 
   if state == "bounds" then
-    drops.bounds = drops.bounds + 1
+    drop("bounds", opcode, rest, sender)
     return
   end
 
@@ -161,7 +194,7 @@ local function onAddonMessage(prefix, payload, distribution, sender)
     local me = UnitName and UnitName("player")
 
     if (distribution and distribution ~= "WHISPER") or (me and sender and sender ~= me) then
-      drops.sender = drops.sender + 1
+      drop("sender", tonumber(match(payload, "^(%d+)")), payload, sender)
       return
     end
   end
@@ -224,8 +257,44 @@ local function build(opcode, body)
   return payload
 end
 
+local function sweepAnswers(every)
+  local current = now()
+
+  for answer, request in pairs(waiting) do
+    if request.deadline <= current then
+      waiting[answer] = nil
+
+      Problems.report(Problems.new("EbonAPI", "SERVER.NO_ANSWER", {
+        request = Opcodes.describe(request.opcode), seconds = ANSWER_TIMEOUT,
+        expected = Opcodes.describe(answer),
+      }))
+    end
+  end
+
+  if not next(waiting) then
+    Bus.untick(ANSWER_TICK)
+  end
+end
+
+local function await(opcode)
+  local answer = ANSWERS[opcode]
+
+  if not answer then
+    return
+  end
+
+  waiting[answer] = { opcode = opcode, deadline = now() + ANSWER_TIMEOUT }
+  Bus.tick(ANSWER_TICK, 1, sweepAnswers)
+end
+
 function Bridge.send(opcode, body)
-  return Queue.pushServer(build(opcode, body))
+  local queued = Queue.pushServer(build(opcode, body))
+
+  if queued then
+    await(opcode)
+  end
+
+  return queued
 end
 
 function Bridge.request(opcode, body, minInterval)
@@ -251,7 +320,13 @@ function Bridge.request(opcode, body, minInterval)
 
   throttles[key] = current + minInterval
 
-  return Queue.pushServer(payload)
+  local queued = Queue.pushServer(payload)
+
+  if queued then
+    await(opcode)
+  end
+
+  return queued
 end
 
 function Bridge.queueLength()
@@ -283,6 +358,12 @@ function Bridge.disable()
 
   Bus.offCore("CHAT_MSG_ADDON", onAddonMessage)
   streams:clear()
+
+  for answer in pairs(waiting) do
+    waiting[answer] = nil
+  end
+
+  Bus.untick(ANSWER_TICK)
 
   return true
 end

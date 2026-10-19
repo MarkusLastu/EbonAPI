@@ -15,7 +15,7 @@ local Handle = EbonAPI.Handle
 
 local type, pairs, next, error, tonumber, pcall = type, pairs, next, error, tonumber, pcall
 local match, gmatch, len, sub, format, concat, sort = string.match, string.gmatch, string.len, string.sub, string.format, table.concat, table.sort
-local random = math.random
+local random, floor = math.random, math.floor
 
 local NAME = "EbonAPI"
 local PREFIX = "EbonAPI"
@@ -77,6 +77,19 @@ local rules = {}
 Share.sent = { lines = 0, keys = 0, data = 0 }
 Share.received = 0
 Share.refused = 0
+
+local Problems = EbonAPI.Problems
+
+Problems.declare("EbonAPI", "EBONAPI", {
+  ["SHARE.REFUSED"] = { class = "rejet" },
+  ["SHARE.FETCH_EXPIRED"] = { class = "echec", key = "key", quiet = true },
+})
+
+local function refuse(sender, key, reason)
+  Share.refused = Share.refused + 1
+
+  Problems.reject("EbonAPI", "SHARE.REFUSED", { sender = sender, key = key, reason = reason })
+end
 
 local function now()
   return (GetTime and GetTime()) or 0
@@ -292,12 +305,17 @@ local function close(key)
 end
 
 local function forget(peer)
+  local cancelled = 0
+
   for index = wFirst, wLast do
     if wPeer[index] == peer then
       waiting[wKey[index]] = nil
       wKey[index], wPeer[index], wState[index] = false, nil, nil
+      cancelled = cancelled + 1
     end
   end
+
+  return cancelled
 end
 
 local function touch(peer)
@@ -340,10 +358,16 @@ tick = function()
 
   for key, fetch in pairs(fetching) do
     if not fetch.queued and current - fetch.at > FETCH_TIMEOUT then
-      late[key], lateAt[key] = fetch.peer, current
-      forget(fetch.peer)
+      local peer, silent = fetch.peer, floor(current - fetch.at)
+
+      late[key], lateAt[key] = peer, current
+
+      local cancelled = forget(peer)
+
       close(key)
       Log.trace("share", nil, "timeout", key)
+      Problems.report(Problems.new("EbonAPI", "SHARE.FETCH_EXPIRED",
+        { peer = peer, key = key, seconds = silent, cancelled = cancelled }))
     end
   end
 
@@ -637,13 +661,17 @@ end
 
 local function onKeysStream(sender, body, addon)
   if not match(addon, "^[%w_]+$") then
-    return
+    return refuse(sender, addon, "addon name is not letters, digits or underscores")
   end
 
   for name, state in gmatch(body, "([%w_]+)=(%d+)") do
-    state = Keys.read(name, state)
+    local reason
 
-    if state then
+    state, reason = Keys.read(name, state)
+
+    if reason then
+      refuse(sender, addon .. "." .. name, reason)
+    else
       local mine = Keys.get(addon, name)
 
       if wanted(addon, name, state, mine) then
@@ -728,13 +756,30 @@ local function onDataStream(sender, body, id)
 
   local addon, name = match(id, "^([%w_]+)%.([%w_]+)$")
   local state, text = match(body, "^([^|]*)|(.*)$")
+  local reason
 
-  if addon and state then
-    state = Keys.read(name, state)
+  if not addon then
+    reason = "stream id is not addon.key"
+  elseif not state then
+    reason = "body has no state before the first |"
+  else
+    state, reason = Keys.read(name, state)
   end
 
-  if not addon or not state or len(text) > TEXT_MAX or not wanted(addon, name, state, Keys.get(addon, name)) then
-    Share.refused = Share.refused + 1
+  if not reason and len(text) > TEXT_MAX then
+    reason = "text of " .. len(text) .. " characters exceeds " .. TEXT_MAX
+  end
+
+  if not reason then
+    local mine = Keys.get(addon, name)
+
+    if not wanted(addon, name, state, mine) then
+      reason = "the state is not newer than the one already held"
+    end
+  end
+
+  if reason then
+    refuse(sender, id, reason)
     pump()
     return
   end

@@ -6,9 +6,11 @@ local Lib = EbonAPI.Lib
 local Bridge = EbonAPI.Bridge
 local SS = EbonAPI.SS
 local Handle = EbonAPI.Handle
+local L = EbonAPI.L
+local Problems = EbonAPI.Problems
 
 local type, tonumber, pairs, next = type, tonumber, pairs, next
-local match, gmatch = string.match, string.gmatch
+local match, gmatch, format, upper, sub = string.match, string.gmatch, string.format, string.upper, string.sub
 local max = math.max
 
 State.MAX_ASH = "18446744073709551615"
@@ -81,6 +83,15 @@ local DERIVED = {
 
 State.rejected = 0
 
+local function reject(opcode, reason, field, body)
+  State.rejected = State.rejected + 1
+
+  Problems.reject("EbonAPI", "SERVER.BODY_REJECTED", {
+    opcode = opcode, reason = reason, field = field,
+    sample = type(body) == "string" and sub(body, 1, 60) or type(body),
+  })
+end
+
 local function derive(data)
   for index = 1, #DERIVED do
     local entry = DERIVED[index]
@@ -94,8 +105,13 @@ end
 function State.parseRun(body)
   local fields, count = Lib.split(body, ";", runFields)
 
-  if count < State.RUN_FIELDS_REQUIRED or tonumber(fields[1]) == nil then
-    State.rejected = State.rejected + 1
+  if count < State.RUN_FIELDS_REQUIRED then
+    reject(SS.PLAYER_RUN_DATA, "too_few_fields", "fields", body)
+    return nil
+  end
+
+  if tonumber(fields[1]) == nil then
+    reject(SS.PLAYER_RUN_DATA, "not_a_number", RUN_FIELDS[1], body)
     return nil
   end
 
@@ -120,8 +136,13 @@ end
 function State.parseIntensity(body)
   local fields, count = Lib.split(body, ";", intensityFields)
 
-  if count < 2 or tonumber(fields[1]) == nil then
-    State.rejected = State.rejected + 1
+  if count < 2 then
+    reject(SS.PLAYER_INTENSITY_POINTS, "too_few_fields", "fields", body)
+    return nil
+  end
+
+  if tonumber(fields[1]) == nil then
+    reject(SS.PLAYER_INTENSITY_POINTS, "not_a_number", "intensity", body)
     return nil
   end
 
@@ -136,18 +157,21 @@ end
 
 function State.parseBank(body)
   if type(body) ~= "string" then
-    State.rejected = State.rejected + 1
+    reject(SS.COMMITTED_SOUL_POINTS, "not_a_string", "body", body)
     return nil
   end
 
-  local spendable, committed = match(body, "^(%d+),(%d+)$")
+  local spendable, committed = match(body, "^(%d+),(%d+)")
 
-  if spendable then
-    spendable, committed = readAsh(spendable), readAsh(committed)
+  if not spendable then
+    reject(SS.COMMITTED_SOUL_POINTS, "bad_format", "spendable,committed", body)
+    return nil
   end
 
+  spendable, committed = readAsh(spendable), readAsh(committed)
+
   if not (spendable and committed) then
-    State.rejected = State.rejected + 1
+    reject(SS.COMMITTED_SOUL_POINTS, "out_of_range", "spendable,committed", body)
     return nil
   end
 
@@ -172,7 +196,7 @@ end
 
 function State.parseBuildList(body)
   if type(body) ~= "string" then
-    State.rejected = State.rejected + 1
+    reject(SS.BUILD_LIST, "not_a_string", "body", body)
     return nil
   end
 
@@ -184,7 +208,7 @@ function State.parseBuildList(body)
       local active, maxSlots, unlocked, prices = match(chunk, "^(%d+)|(%d+)|(%d+)|(.*)$")
 
       if not active then
-        State.rejected = State.rejected + 1
+        reject(SS.BUILD_LIST, "bad_format", "header", body)
         return nil
       end
 
@@ -212,7 +236,7 @@ function State.parseBuildList(body)
   end
 
   if first then
-    State.rejected = State.rejected + 1
+    reject(SS.BUILD_LIST, "empty", "header", body)
     return nil
   end
 
@@ -277,14 +301,14 @@ end
 
 function State.parseLoadouts(body)
   if type(body) ~= "string" then
-    State.rejected = State.rejected + 1
+    reject(SS.SEND_LOADOUTS, "not_a_string", "body", body)
     return nil
   end
 
   local globalPart, loadoutsPart = match(body, "^([^_]+)_?(.*)$")
 
   if not globalPart then
-    State.rejected = State.rejected + 1
+    reject(SS.SEND_LOADOUTS, "bad_format", "global", body)
     return nil
   end
 
@@ -300,7 +324,7 @@ function State.parseLoadouts(body)
       result.spendable = spendable
       result.committed = committed
     else
-      State.rejected = State.rejected + 1
+      reject(SS.SEND_LOADOUTS, "out_of_range", "spendable,committed", body)
     end
   end
 
@@ -341,7 +365,7 @@ function State.parseLoadouts(body)
   local name = chosen[2]
 
   if type(name) ~= "string" or name == "" or match(name, "|") then
-    State.rejected = State.rejected + 1
+    reject(SS.SEND_LOADOUTS, "bad_name", "name", body)
     return result
   end
 
@@ -481,6 +505,10 @@ local function onIntensity(body)
 end
 
 local function onBank(body)
+  if body == "" then
+    return
+  end
+
   local spendable, committed = State.parseBank(body)
 
   if not spendable then
@@ -495,10 +523,14 @@ local function onBank(body)
 end
 
 local function onMultiplier(body)
+  if body == "" then
+    return
+  end
+
   local value = tonumber(body)
 
   if not value then
-    State.rejected = State.rejected + 1
+    reject(SS.SOUL_POINTS_MULTIPLIER, "not_a_number", "multiplier", body)
     return
   end
 
@@ -525,7 +557,7 @@ local function onBuildActive(body)
   end
 
   if not builds.slots[slot] then
-    State.rejected = State.rejected + 1
+    reject(SS.BUILD_ACTIVE, "unknown_slot", "slot", body)
     return
   end
 
@@ -554,6 +586,136 @@ local function onLoadouts(body)
   EbonAPI:Emit("SERVER_LOADOUT", loadout)
 end
 
+Problems.declare("EbonAPI", "EBONAPI", {
+  ["SERVER.BUILD_REFUSED"] = { class = "refus", key = "reason" },
+  ["SERVER.TREE_REFUSED"] = { class = "echec" },
+  ["SERVER.PICK_REFUSED"] = { class = "echec" },
+  ["SERVER.FREEZE_REFUSED"] = { class = "echec" },
+  ["SERVER.RESET_REFUSED"] = { class = "refus", key = "code" },
+  ["SERVER.PRESTIGE_REFUSED"] = { class = "refus", key = "reason" },
+  ["SERVER.BODY_REJECTED"] = { class = "rejet" },
+})
+
+local BUILD_REASONS = {
+  disabled = "DISABLED", slot = "SLOT", empty = "EMPTY", level = "LEVEL", combat = "COMBAT", dead = "DEAD",
+  rolls = "ROLLS", locked = "LOCKED", max = "MAX", money = "MONEY", designed = "DESIGNED", invalid = "INVALID",
+  full = "FULL", norecover = "NORECOVER", occupied = "OCCUPIED", overbudget = "OVERBUDGET",
+  recoverable = "RECOVERABLE",
+}
+
+local BUILD_VARIANT = { empty = "save", level = "save", full = "recover", overbudget = "recover" }
+
+local PRESTIGE_REASONS = { gate = "GATE", combat = "COMBAT", dead = "DEAD" }
+
+local function why(prefix, suffix, reason)
+  local text = suffix and L[prefix .. suffix]
+
+  return text or format(L.PROBLEM_SERVER_REASON_UNKNOWN, reason)
+end
+
+local function refuse(code, facts)
+  local problem = Problems.new("EbonAPI", code, facts)
+
+  Problems.report(problem)
+
+  return problem
+end
+
+local function result(kind, problem)
+  EbonAPI:Emit("SERVER_RESULT", kind, problem == nil, problem)
+end
+
+local function onBuildAck(body)
+  local status, op, reason = match(tostring(body), "^([^,]+),([^,]+),(.*)$")
+
+  if status == "OK" then
+    result("build")
+  elseif status == "FAIL" then
+    local suffix = BUILD_REASONS[reason]
+
+    if suffix and BUILD_VARIANT[reason] == op then
+      suffix = suffix .. "_" .. upper(op)
+    end
+
+    result("build", refuse("SERVER.BUILD_REFUSED", {
+      op = op, reason = reason, why = why("PROBLEM_SERVER_BUILD_REFUSED_", suffix, reason),
+    }))
+  else
+    reject(SS.BUILD_ACK, "bad_status", "status", body)
+  end
+end
+
+local function onTreeResult(body)
+  local flag = match(tostring(body), "^([01])$")
+
+  if flag == "1" then
+    result("tree")
+  elseif flag == "0" then
+    result("tree", refuse("SERVER.TREE_REFUSED"))
+  else
+    reject(SS.SKILL_TREE_UPDATE_SPELL_CAST_RESULT, "bad_flag", "flag", body)
+  end
+end
+
+local function onPickResult(body)
+  local count = match(tostring(body), "^(%d+)$")
+
+  if not count then
+    reject(SS.PLAYER_PERK_SELECTION_RESULT, "not_a_number", "count", body)
+  elseif tonumber(count) > 0 then
+    result("pick")
+  else
+    result("pick", refuse("SERVER.PICK_REFUSED"))
+  end
+end
+
+local function onFreezeResult(body)
+  local flag = match(tostring(body), "^([01])$")
+
+  if flag == "1" then
+    result("freeze")
+  elseif flag == "0" then
+    result("freeze", refuse("SERVER.FREEZE_REFUSED"))
+  else
+    reject(SS.FREEZE_PERK_RESULT, "bad_flag", "flag", body)
+  end
+end
+
+local function onResetResult(body)
+  local code, cost = match(tostring(body), "^(%d+),(%d+)$")
+
+  if not code then
+    reject(SS.INSTANCE_RESET_RESULT, "bad_format", "code,cost", body)
+    return
+  end
+
+  code = tonumber(code)
+
+  if code == 0 then
+    result("reset")
+    return
+  end
+
+  result("reset", refuse("SERVER.RESET_REFUSED", {
+    code = code, cost = tonumber(cost),
+    why = why("PROBLEM_SERVER_RESET_REFUSED_", code >= 1 and code <= 6 and code or nil, code),
+  }))
+end
+
+local function onPrestigeResult(body)
+  local status, reason = match(tostring(body), "^(%a+),(.*)$")
+
+  if status == "OK" then
+    result("prestige")
+  elseif status == "FAIL" then
+    result("prestige", refuse("SERVER.PRESTIGE_REFUSED", {
+      reason = reason, why = why("PROBLEM_SERVER_PRESTIGE_REFUSED_", PRESTIGE_REASONS[reason], reason),
+    }))
+  else
+    reject(SS.PRESTIGE_RESULT, "bad_status", "status", body)
+  end
+end
+
 local wired = false
 
 function State.enable()
@@ -570,6 +732,12 @@ function State.enable()
   Bridge.on(SS.BUILD_LIST, onBuildList)
   Bridge.on(SS.BUILD_ACTIVE, onBuildActive)
   Bridge.on(SS.SEND_LOADOUTS, onLoadouts)
+  Bridge.on(SS.BUILD_ACK, onBuildAck)
+  Bridge.on(SS.SKILL_TREE_UPDATE_SPELL_CAST_RESULT, onTreeResult)
+  Bridge.on(SS.PLAYER_PERK_SELECTION_RESULT, onPickResult)
+  Bridge.on(SS.FREEZE_PERK_RESULT, onFreezeResult)
+  Bridge.on(SS.INSTANCE_RESET_RESULT, onResetResult)
+  Bridge.on(SS.PRESTIGE_RESULT, onPrestigeResult)
 
   return true
 end
@@ -588,6 +756,12 @@ function State.disable()
   Bridge.off(SS.BUILD_LIST, onBuildList)
   Bridge.off(SS.BUILD_ACTIVE, onBuildActive)
   Bridge.off(SS.SEND_LOADOUTS, onLoadouts)
+  Bridge.off(SS.BUILD_ACK, onBuildAck)
+  Bridge.off(SS.SKILL_TREE_UPDATE_SPELL_CAST_RESULT, onTreeResult)
+  Bridge.off(SS.PLAYER_PERK_SELECTION_RESULT, onPickResult)
+  Bridge.off(SS.FREEZE_PERK_RESULT, onFreezeResult)
+  Bridge.off(SS.INSTANCE_RESET_RESULT, onResetResult)
+  Bridge.off(SS.PRESTIGE_RESULT, onPrestigeResult)
 
   return true
 end

@@ -1,9 +1,10 @@
 ## Interface: 30300
 ## Title: |cff8a6fd4EbonAPI|r
 ## Author: Siphelis
-## Version: 2.1.2
+## Version: 2.1.3-0
 ## SavedVariables: EbonAPIDB
 
+Core\Catch.lua
 Core\Lib.lua
 Core\Hash.lua
 Core\Api.lua
@@ -12,6 +13,7 @@ Core\Log.lua
 Core\Bus.lua
 Core\Assembler.lua
 Core\DB.lua
+Core\Problems.lua
 Core\Session.lua
 
 Locales\enUS.lua
@@ -49,7 +51,9 @@ UI\Options.lua
 UI\Windows.lua
 UI\Window.lua
 UI\Kit.lua
+UI\Alerts.lua
 UI\Minimap.lua
 UI\Settings.lua
+UI\Center.lua
 
 Boot.lua

@@ -14,14 +14,14 @@ local KEYS = Catalog.PALETTE
 local CLASSES = {
   background = { "bg", "bgSoft", "card", "checkbox", "headerBg", "navBg", "pageBg", "footerBg" },
   foreground = { "text", "muted", "title" },
-  fixed = { "buttonText", "buttonDisabledText", "selectedText", "shadow", "success" },
+  fixed = { "buttonText", "buttonDisabledText", "selectedText", "shadow", "success", "danger", "caution" },
   accent = {
     "border", "borderDim", "button", "buttonBorder", "buttonHover", "buttonDisabledBorder", "checkboxBorder",
     "checked", "thumb", "selected", "heading", "menu", "focus", "buttonHoverFill", "rowHover",
   },
 }
 local SCALED = { bg = true, bgSoft = true, card = true, headerBg = true, navBg = true, pageBg = true, footerBg = true }
-local AGAINST_BACKGROUND = { "heading", "buttonHover", "checked", "thumb", "focus", "success" }
+local AGAINST_BACKGROUND = { "heading", "buttonHover", "checked", "thumb", "focus", "success", "danger", "caution" }
 local WHITE = { 1, 1, 1 }
 local BLACK = { 0, 0, 0 }
 local WEAK = { __mode = "k" }

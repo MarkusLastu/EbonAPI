@@ -96,7 +96,6 @@ function Streams:purge(current)
     for id, record in pairs(byId) do
       if current - record.at > self.timeout then
         self:drop(owner, id, byId)
-
         if self.onExpire then
           self.onExpire(owner, id, record)
         end

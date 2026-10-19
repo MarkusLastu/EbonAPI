@@ -17,28 +17,12 @@ Lib.min = min
 Lib.concat = concat
 
 function Lib.report(err, owner)
+  local Catch = EbonAPI.Catch
+
   EbonAPI.Log.trace("error", owner, tostring(err))
+  Catch.report(err, owner)
 
-  return Lib.display(err)
-end
-
-function Lib.display(err)
-  if geterrorhandler then
-    local handler = geterrorhandler()
-
-    if handler then
-      handler(err)
-      return true
-    end
-  end
-
-  if DEFAULT_CHAT_FRAME then
-    local COLOR = EbonAPI.Log.COLOR
-
-    DEFAULT_CHAT_FRAME:AddMessage(COLOR.ERROR .. "[EbonAPI]" .. COLOR.RESET .. " " .. tostring(err))
-  end
-
-  return false
+  return Catch.forward(err)
 end
 
 local function upperLatin(second)

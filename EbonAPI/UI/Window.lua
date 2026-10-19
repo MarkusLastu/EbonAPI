@@ -11,7 +11,7 @@ local Options = EbonAPI.Options
 local Parameters = EbonAPI.Parameters
 local Handle = EbonAPI.Handle
 local L = EbonAPI.L
-local Log = EbonAPI.Log
+local Problems = EbonAPI.Problems
 
 local type, pairs, ipairs, pcall, tostring = type, pairs, ipairs, pcall, tostring
 local floor, max, min = math.floor, math.max, math.min
@@ -53,8 +53,23 @@ local collapsed = {}
 local controls = {}
 local navPools = {}
 
-local function report(err)
-  Lib.report(err)
+Problems.declare("EbonAPI", "EBONAPI", {
+  ["OPTIONS.DESC_FAILED"] = { class = "bug", key = "option" },
+})
+
+local function pathOf(node)
+  local path = node and node.path
+  if type(path) == "table" then return concat(path, ".") end
+  return path and tostring(path) or (node and node.owner)
+end
+
+local function report(err, node, name)
+  EbonAPI.Kit.fail("EBONAPI.KIT.CALLBACK_FAILED", err, node and node.owner,
+    { element = pathOf(node), callback = name, addon = node and node.owner })
+end
+
+local function descFailed(node, err)
+  EbonAPI.Kit.fail("EBONAPI.OPTIONS.DESC_FAILED", err, node.owner, { option = pathOf(node) })
 end
 
 local function blockBackground(frame, key)
@@ -71,7 +86,7 @@ local function apply(node, ...)
   local ok, err = pcall(Options.set, node, ...)
 
   if not ok then
-    report(err)
+    report(err, node, "set")
   end
 
   Window.refresh()
@@ -97,7 +112,14 @@ end
 local builders = {}
 
 local function read(node)
-  return Options.name(node), Options.desc(node), Options.isDisabled(node)
+  local ok, desc = pcall(Options.desc, node)
+
+  if not ok then
+    descFailed(node, desc)
+    desc = nil
+  end
+
+  return Options.name(node), desc, Options.isDisabled(node)
 end
 
 function builders.toggle(node, parent, available, pools)
@@ -197,7 +219,7 @@ function builders.execute(node, parent, available, pools)
     local ok, err = pcall(Options.run, node)
 
     if not ok then
-      report(err)
+      report(err, node, "run")
     end
 
     Window.refresh()
@@ -274,7 +296,9 @@ end
 local function inlineDesc(child)
   local ok, desc = pcall(Options.desc, child)
 
-  if ok and type(desc) == "string" and desc ~= "" then
+  if not ok then
+    descFailed(child, desc)
+  elseif type(desc) == "string" and desc ~= "" then
     return desc
   end
 
@@ -309,7 +333,7 @@ layoutList = function(list, parent, left, top, width, skipNavGroups, pools)
         if ok then
           y = y + height + gapY
         else
-          report(height)
+          report(height, child, "group")
         end
       end
     else
@@ -317,7 +341,7 @@ layoutList = function(list, parent, left, top, width, skipNavGroups, pools)
       local ok, widget, used, height, full = pcall(builder, child, parent, width, pools)
 
       if not ok then
-        report(widget)
+        report(widget, child, "build")
       elseif widget then
         local desc = mode ~= "TOOLTIP" and INLINE[kind] and inlineDesc(child)
         local alone = full or stacked or desc
@@ -817,7 +841,7 @@ local function renderSearch(view)
       if ok then
         y = y + height + S("page.gap.y")
       else
-        report(height)
+        report(height, bucket[1], "group")
       end
     end
 
@@ -891,6 +915,10 @@ local function renderView(view)
 
     if node then
       local okDesc, desc = pcall(Options.desc, node)
+
+      if not okDesc then
+        descFailed(node, desc)
+      end
 
       view.title:SetText(Options.name(node))
       view.desc:SetText(okDesc and desc or "")
@@ -995,7 +1023,7 @@ local function navEntries()
       end)
 
       if not ok then
-        report(err)
+        report(err, { owner = owner }, "nav")
       end
     end
   end
@@ -1017,7 +1045,7 @@ local function normalize()
   local ok, err = pcall(currentNode)
 
   if not ok then
-    report(err)
+    report(err, { owner = shown.owner, path = shown.key }, "page")
   end
 end
 
@@ -1803,6 +1831,18 @@ local function buildHeader()
   return frame
 end
 
+local function loggedCount(journal, name)
+  local total = 0
+
+  for key, item in pairs(journal and journal[name] or {}) do
+    if Problems.option(Problems.addonOf(key), "center") then
+      total = total + item.n
+    end
+  end
+
+  return total
+end
+
 local function refreshFooter()
   local items = footer and footer.items
 
@@ -1819,12 +1859,14 @@ local function refreshFooter()
     end
   end
 
-  items.errors:SetValue(tostring(Log.count("error")))
-  items.warnings:SetValue(tostring(Log.count("warn")))
+  local journal = Problems.journal()
+
+  items.errors:SetValue(tostring(Problems.summary(nil, "center").count))
+  items.warnings:SetValue(tostring(loggedCount(journal, "refusals") + loggedCount(journal, "rejects")))
   items.language:SetValue(upper(sub(EbonAPI:GetLanguage() or "", 1, 2)))
   items.addons:SetValue(format(L.UI_STATUS_ADDONS, #names))
   items.updates:SetValue(format(L.UI_STATUS_UPDATES, updates))
-  items.errors.tipTitle, items.warnings.tipTitle = L.UI_STATUS_LOG, L.UI_STATUS_LOG
+  items.errors.tipTitle, items.warnings.tipTitle = L.UI_STATUS_ERRORS, L.UI_STATUS_WARNINGS
   items.language.tipTitle = L.UI_LANGUAGE
   items.addons.tipTitle, items.updates.tipTitle = L.UI_ADDONS, L.UI_ADDONS
 
@@ -1914,14 +1956,6 @@ local function statusItem(parent, icon)
   return item
 end
 
-local function openReport(kind)
-  local Settings = EbonAPI.Settings
-
-  Settings.setTraceKind(kind)
-  Settings.show("trace")
-  Window.select("EbonAPI", "diagnostic")
-end
-
 local function buildFooter()
   local frame = CreateFrame("Frame", nil, UIParent)
 
@@ -1969,11 +2003,9 @@ local function buildFooter()
     local elapsed, refresh = 0, S("footer.refresh")
 
     items.errors.onClick = function()
-      openReport("error")
+      Problems.open(nil)
     end
-    items.warnings.onClick = function()
-      openReport("warn")
-    end
+    items.warnings.onClick = items.errors.onClick
     items.language.onClick = function()
       Window.select("EbonAPI", "general")
     end

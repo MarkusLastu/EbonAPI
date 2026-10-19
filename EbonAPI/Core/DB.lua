@@ -3,7 +3,6 @@ EbonAPI.DB = {}
 
 local DB = EbonAPI.DB
 local Lib = EbonAPI.Lib
-local Log = EbonAPI.Log
 local Handle = EbonAPI.Handle
 
 local type, pairs, ipairs, error = type, pairs, ipairs, error
@@ -43,11 +42,47 @@ function DB.CharacterName()
   return characterName
 end
 
-local function ensureTable(container, key)
-  if type(container[key]) ~= "table" then
-    if container[key] ~= nil then
-      DB.repaired = DB.repaired + 1
-      Log.trace("repair", "EbonAPI", key)
+local declared = false
+
+local function problems()
+  local Problems = EbonAPI.Problems
+
+  if not declared then
+    declared = true
+
+    Problems.declare("EbonAPI", "EBONAPI", {
+      ["DB.REPAIRED"] = { class = "reparation", key = "path" },
+      ["DB.MIGRATION_FAILED"] = { class = "bug", key = "migration" },
+    })
+  end
+
+  return Problems
+end
+
+local function repaired(first, second, key, old, lost)
+  DB.repaired = DB.repaired + 1
+
+  local Problems = problems()
+
+  key = tostring(key)
+
+  if second then
+    key = second .. "." .. key
+  end
+
+  if first then
+    key = first .. "." .. key
+  end
+
+  Problems.repaired("EbonAPI", "DB.REPAIRED", { path = key, found = type(old), lost = lost }, old)
+end
+
+local function ensureTable(container, key, first, second)
+  local found = container[key]
+
+  if type(found) ~= "table" then
+    if found ~= nil then
+      repaired(first, second, key, found)
     end
 
     container[key] = {}
@@ -56,11 +91,11 @@ local function ensureTable(container, key)
   return container[key]
 end
 
-local function ensureBucket(container, key)
-  local bucket = ensureTable(container, key)
+local function ensureBucket(container, key, parent)
+  local bucket = ensureTable(container, key, nil, parent)
 
-  ensureTable(bucket, "account")
-  ensureTable(bucket, "characters")
+  ensureTable(bucket, "account", parent, key)
+  ensureTable(bucket, "characters", parent, key)
 
   return bucket
 end
@@ -72,7 +107,7 @@ local function shape(db)
   ensureTable(db, "migrations")
 
   for name in pairs(addons) do
-    ensureBucket(addons, name)
+    ensureBucket(addons, name, "addons")
   end
 
   return db
@@ -81,8 +116,7 @@ end
 function DB.attach(saved)
   if type(saved) ~= "table" then
     if saved ~= nil then
-      DB.repaired = DB.repaired + 1
-      Log.trace("repair", "EbonAPI", "EbonAPIDB")
+      repaired(nil, nil, "EbonAPIDB", saved, 1)
     end
 
     saved = {}
@@ -132,7 +166,7 @@ local function bucketFor(owner)
     return db.shared
   end
 
-  return ensureBucket(db.addons, owner)
+  return ensureBucket(db.addons, owner, "addons")
 end
 
 function Store:Rebind()
@@ -143,7 +177,7 @@ function Store:Rebind()
   self.account = Lib.applyDefaults(bucket.account, defaults.account)
 
   if characterKey then
-    local entry = ensureTable(bucket.characters, characterKey)
+    local entry = ensureTable(bucket.characters, characterKey, self.owner or "shared", "characters")
 
     Lib.applyDefaults(entry, defaults.character)
     self.char = entry
@@ -167,7 +201,7 @@ function Store:ResetCharacter()
     return false
   end
 
-  local entry = ensureTable(self.bucket.characters, characterKey)
+  local entry = ensureTable(self.bucket.characters, characterKey, self.owner or "shared", "characters")
 
   for key in pairs(entry) do
     entry[key] = nil
@@ -211,7 +245,14 @@ local function migrate(store, key, legacy, fn, perCharacter)
   local ok, result = pcall(fn, store, legacy, characterName, characterKey)
 
   if not ok then
-    Log.error(store.owner, "migration '" .. key .. "' failed: " .. tostring(result))
+    local Problems = problems()
+    local problem = Problems.new("EbonAPI", "DB.MIGRATION_FAILED", {
+      migration = key, owner = store.owner or "shared", error = result,
+    })
+
+    problem.where = Problems.where(problem.facts.error)
+    Problems.report(problem)
+
     return false
   end
 

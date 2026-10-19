@@ -256,8 +256,16 @@ function Profile.DecodeBans(text)
   return lists
 end
 
-local function reject()
+EbonAPI.Problems.declare("EbonAPI", "EBONAPI", {
+  ["PROFILE.REJECTED"] = { class = "rejet" },
+})
+
+local function reject(sender, reason, body)
   Profile.rejected = Profile.rejected + 1
+
+  EbonAPI.Problems.reject("EbonAPI", "PROFILE.REJECTED", {
+    sender = sender, reason = reason, sample = sub(body, 1, 60),
+  })
 end
 
 local function onSlots(sender, body)
@@ -265,8 +273,12 @@ local function onSlots(sender, body)
 
   class = tonumber(class)
 
-  if not class or class < 1 or class > CLASS_MAX then
-    return reject()
+  if not class then
+    return reject(sender, "slots: malformed message", body)
+  end
+
+  if class < 1 or class > CLASS_MAX then
+    return reject(sender, "slots: class " .. class .. " is outside 1 to " .. CLASS_MAX, body)
   end
 
   local slots = {}
@@ -275,7 +287,7 @@ local function onSlots(sender, body)
     slot = tonumber(slot)
 
     if slot < 1 or slot > SLOT_MAX then
-      return reject()
+      return reject(sender, "slots: slot " .. slot .. " is outside 1 to " .. SLOT_MAX, body)
     end
 
     slots[#slots + 1] = slot
@@ -294,16 +306,24 @@ local function onBuild(sender, body)
 
   class, slot = tonumber(class), tonumber(slot)
 
-  if not class or class < 1 or class > CLASS_MAX or slot < 1 or slot > SLOT_MAX then
-    return reject()
+  if not class then
+    return reject(sender, "build: malformed message", body)
+  end
+
+  if class < 1 or class > CLASS_MAX then
+    return reject(sender, "build: class " .. class .. " is outside 1 to " .. CLASS_MAX, body)
+  end
+
+  if slot < 1 or slot > SLOT_MAX then
+    return reject(sender, "build: slot " .. slot .. " is outside 1 to " .. SLOT_MAX, body)
   end
 
   if len(echoes) % 3 ~= 0 or len(echoes) > BUILD_ECHOES_MAX * 3 then
-    return reject()
+    return reject(sender, "build: echo list of " .. len(echoes) .. " characters is not a multiple of 3 up to " .. BUILD_ECHOES_MAX * 3, body)
   end
 
   if locked and (len(locked) % 2 ~= 0 or len(locked) > BUILD_ECHOES_MAX * 2) then
-    return reject()
+    return reject(sender, "build: locked list of " .. len(locked) .. " characters is not a multiple of 2 up to " .. BUILD_ECHOES_MAX * 2, body)
   end
 
   local signed = class .. ":" .. slot .. ":" .. echoes
@@ -313,7 +333,7 @@ local function onBuild(sender, body)
   end
 
   if Profile.Signature(signed) ~= hash then
-    return reject()
+    return reject(sender, "build: signature does not match", body)
   end
 
   Profile.received = Profile.received + 1
@@ -325,8 +345,12 @@ local function onBans(sender, body)
 
   class = tonumber(class)
 
-  if not class or class < 1 or class > CLASS_MAX then
-    return reject()
+  if not class then
+    return reject(sender, "bans: malformed message", body)
+  end
+
+  if class < 1 or class > CLASS_MAX then
+    return reject(sender, "bans: class " .. class .. " is outside 1 to " .. CLASS_MAX, body)
   end
 
   local count = 0
@@ -334,13 +358,17 @@ local function onBans(sender, body)
   for chunk in gmatch(lists, "[^;]+") do
     count = count + 1
 
-    if count > BAN_LISTS_MAX or len(chunk) % 2 ~= 0 or len(chunk) > LIST_ECHOES_MAX * 2 then
-      return reject()
+    if count > BAN_LISTS_MAX then
+      return reject(sender, "bans: more than " .. BAN_LISTS_MAX .. " lists", body)
+    end
+
+    if len(chunk) % 2 ~= 0 or len(chunk) > LIST_ECHOES_MAX * 2 then
+      return reject(sender, "bans: list of " .. len(chunk) .. " characters is not a multiple of 2 up to " .. LIST_ECHOES_MAX * 2, body)
     end
   end
 
   if Profile.Signature(class .. ":" .. lists) ~= hash then
-    return reject()
+    return reject(sender, "bans: signature does not match", body)
   end
 
   Profile.received = Profile.received + 1

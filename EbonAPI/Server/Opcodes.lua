@@ -2,6 +2,7 @@ EbonAPI = EbonAPI or {}
 
 EbonAPI.SS = {
   SEND_LOADOUTS                 = 3,
+  SKILL_TREE_UPDATE_SPELL_CAST_RESULT = 6,
   INSTANCE_ENTERED              = 9,
   INSTANCE_ENCOUNTERS_COMPLETED = 10,
   JUNK_SOLD                     = 12,
@@ -14,11 +15,15 @@ EbonAPI.SS = {
   PLAYER_SPEC_INDEX             = 32,
   OBJECTIVES_PROPOSALS          = 101,
   CURRENT_OBJECTIVE             = 102,
+  FREEZE_PERK_RESULT            = 104,
   HARDMODE_DATA                 = 500,
   BUILD_LIST                    = 540,
   BUILD_ACK                     = 541,
   BUILD_ACTIVE                  = 542,
+  INSTANCE_RESET_RESULT         = 701,
   CHECKPOINTS_DATA              = 800,
+  PLAYER_PERK_SELECTION_RESULT  = 1000,
+  PRESTIGE_RESULT               = 1201,
   ORBS                          = 1220,
 }
 

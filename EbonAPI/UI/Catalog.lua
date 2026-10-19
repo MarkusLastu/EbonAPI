@@ -29,7 +29,7 @@ local PALETTE = {
   "bg", "bgSoft", "card", "border", "borderDim", "button", "buttonBorder", "buttonHover",
   "buttonDisabledBorder", "buttonText", "buttonDisabledText", "checkbox", "checkboxBorder", "checked",
   "thumb", "selected", "selectedText", "text", "muted", "title", "heading", "menu", "shadow",
-  "focus", "buttonHoverFill", "rowHover", "headerBg", "navBg", "pageBg", "footerBg", "success",
+  "focus", "buttonHoverFill", "rowHover", "headerBg", "navBg", "pageBg", "footerBg", "success", "danger", "caution",
 }
 
 local ROLES = { small = true, normal = true, large = true, button = true }
@@ -451,11 +451,20 @@ whole("kit.badge.size", 6, 40)
 whole("kit.badge.level", 1, 10)
 add("kit.badge.color", "key")
 add("kit.badge.text", "key")
+whole("kit.band.height", 12, 60)
+number("kit.band.alpha", 0, 1)
+add("kit.band.text", "key")
 whole("kit.progress.height", 4, 60)
 add("kit.progress.color", "key")
 add("kit.progress.background", "key")
 add("kit.progress.border", "key")
 whole("kit.row", 10, 60)
+whole("kit.rows.action", 8, 60)
+add("kit.rows.fill", "key")
+number("kit.rows.fillAlpha", 0, 1)
+add("kit.rows.mark", "key")
+number("kit.rows.markAlpha", 0, 1)
+add("kit.rows.suffix", "key")
 whole("kit.slot", 10, 80)
 whole("kit.indent", 0, 60)
 whole("kit.list", 40, 800)
@@ -471,6 +480,10 @@ number("kit.toast.duration", 1, 30)
 whole("kit.toast.top", 0, 600)
 whole("kit.toast.icon", 12, 64)
 number("kit.toast.fade", 0, 5)
+whole("kit.problem.alert.width", 100, 600)
+whole("kit.problem.alert.max", 1, 10)
+number("kit.problem.discreet.duration", 1, 30)
+number("kit.problem.discreet.quiet", 0, 3600)
 whole("kit.drag", 0, 60)
 whole("kit.ghost.width", 20, 600)
 add("kit.ghost.color", "key")

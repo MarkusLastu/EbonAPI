@@ -135,6 +135,8 @@ EbonAPI:RegisterSkin("Porcelain", {
     pageBg = { 0xF2F2F7, 0.9 },
     footerBg = { 0xEBEBEB, 0 },
     success = 0x137333,
+    danger = 0xC5221F,
+    caution = 0x9A5B00,
   },
 
   fonts = {
@@ -202,6 +204,7 @@ EbonAPI:RegisterSkin("Porcelain", {
     header = 24,
     control = 18,
     icon = { border = "checkboxBorder" },
+    rows = { action = 16, fill = "checked", fillAlpha = 0.22, mark = "danger", markAlpha = 0.14, suffix = "muted" },
   },
 
   chat = {

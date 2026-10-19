@@ -6,6 +6,7 @@ local Catalog = EbonAPI.Catalog
 local Lib = EbonAPI.Lib
 local Log = EbonAPI.Log
 local DB = EbonAPI.DB
+local Problems = EbonAPI.Problems
 
 local type, pairs, ipairs, tostring, error = type, pairs, ipairs, tostring, error
 local format, concat, find = string.format, table.concat, string.find
@@ -21,6 +22,11 @@ local CHAT = {
   GOLD = "chat.gold", SILVER = "chat.silver", COPPER = "chat.copper",
 }
 
+Problems.declare("EbonAPI", "EBONAPI", {
+  ["SKIN.KEY_REJECTED"] = { class = "rejet", key = "key" },
+  ["SKIN.FALLBACK"] = { class = "panne", key = "skin" },
+})
+
 Skins.DEFAULT = DEFAULT
 Skins.FOLDER = FOLDER
 
@@ -32,6 +38,11 @@ local references = nil
 local bricks = nil
 local active = DEFAULT
 local store = nil
+local fallen = nil
+
+local function reject(problems, key, reason)
+  problems[#problems + 1] = { key = key, reason = reason }
+end
 
 local function account()
   if not DB.isAttached() then
@@ -61,8 +72,8 @@ local function read(skin, source, prefix, problems)
     if type(key) == "string" then
       keys[#keys + 1] = key
     else
-      problems[#problems + 1] = format('keys must be texts, got %s in "%s"', tostring(key),
-        prefix == "" and "(root)" or prefix)
+      reject(problems, tostring(key), format('keys must be texts, got %s in "%s"', tostring(key),
+        prefix == "" and "(root)" or prefix))
     end
   end
 
@@ -78,9 +89,9 @@ local function read(skin, source, prefix, problems)
         local reason = Catalog.problem(entry, value)
 
         if reason then
-          problems[#problems + 1] = reason
+          reject(problems, path, reason)
         elseif skin.values[path] ~= nil then
-          problems[#problems + 1] = format('parameter "%s" is given twice, flat and nested', path)
+          reject(problems, path, format('parameter "%s" is given twice, flat and nested', path))
         else
           skin.values[path] = MEDIA[entry.kind] and media(skin.name, entry.kind, value) or value
         end
@@ -88,10 +99,10 @@ local function read(skin, source, prefix, problems)
         if type(value) == "table" then
           read(skin, value, path, problems)
         else
-          problems[#problems + 1] = format('section "%s" expects a table, got %s', path, type(value))
+          reject(problems, path, format('section "%s" expects a table, got %s', path, type(value)))
         end
       else
-        problems[#problems + 1] = format('unknown parameter "%s"', path)
+        reject(problems, path, format('unknown parameter "%s"', path))
       end
     end
   end
@@ -99,7 +110,7 @@ end
 
 local function readBricks(skin, source, problems)
   if type(source) ~= "table" then
-    problems[#problems + 1] = "bricks must be a table of slots, got " .. type(source)
+    reject(problems, "bricks", "bricks must be a table of slots, got " .. type(source))
     return
   end
 
@@ -107,18 +118,18 @@ local function readBricks(skin, source, problems)
     local list = source[slot]
 
     if not Catalog.slotKey(slot) then
-      problems[#problems + 1] = format('unknown brick slot "%s" (known: %s)', tostring(slot),
-        concat(Catalog.slotNames(), ", "))
+      reject(problems, "bricks." .. tostring(slot), format('unknown brick slot "%s" (known: %s)', tostring(slot),
+        concat(Catalog.slotNames(), ", ")))
     elseif type(list) ~= "table" then
-      problems[#problems + 1] = format('brick slot "%s" expects a table of name = constructor, got %s',
-        slot, type(list))
+      reject(problems, "bricks." .. slot, format('brick slot "%s" expects a table of name = constructor, got %s',
+        slot, type(list)))
     else
       for _, name in ipairs(Lib.sortedKeys(list)) do
         local build = list[name]
 
         if type(name) ~= "string" or type(build) ~= "function" then
-          problems[#problems + 1] = format('brick "%s.%s" must be a function, got %s', slot, tostring(name),
-            type(build))
+          reject(problems, "bricks." .. slot .. "." .. tostring(name), format('brick "%s.%s" must be a function, got %s',
+            slot, tostring(name), type(build)))
         else
           skin.bricks[slot] = skin.bricks[slot] or {}
           skin.bricks[slot][name] = build
@@ -157,7 +168,7 @@ function EbonAPI:RegisterSkin(name, spec)
   elseif parent == nil then
     parent = DEFAULT
   elseif type(parent) ~= "string" then
-    problems[#problems + 1] = "parent must be a skin name, got " .. type(parent)
+    reject(problems, "parent", "parent must be a skin name, got " .. type(parent))
     parent = DEFAULT
   end
 
@@ -170,11 +181,7 @@ function EbonAPI:RegisterSkin(name, spec)
   end
 
   for _, problem in ipairs(problems) do
-    Lib.report(format('EbonAPI: skin "%s": %s', name, problem))
-  end
-
-  if #problems > 0 then
-    return false
+    Problems.reject("EbonAPI", "SKIN.KEY_REJECTED", { skin = name, key = problem.key, reason = problem.reason })
   end
 
   registered[name] = skin
@@ -199,7 +206,8 @@ local function chainOf(name, loud)
   while at do
     if seen[at] then
       if loud then
-        Lib.report(format('EbonAPI: skin "%s": parent loop at "%s"', name, at))
+        Problems.reject("EbonAPI", "SKIN.KEY_REJECTED",
+          { skin = name, key = "parent", reason = format('parent loop at "%s"', at) })
       end
 
       break
@@ -209,7 +217,8 @@ local function chainOf(name, loud)
 
     if not skin then
       if loud then
-        Lib.report(format('EbonAPI: skin "%s": unknown parent "%s"', name, at))
+        Problems.reject("EbonAPI", "SKIN.KEY_REJECTED",
+          { skin = name, key = "parent", reason = format('unknown parent "%s"', at) })
       end
 
       break
@@ -245,8 +254,15 @@ function Skins.resolve()
 
   if type(saved) == "string" and registered[saved] then
     name = saved
-  elseif saved ~= nil then
+  end
+
+  if saved ~= nil and name ~= saved then
+    fallen = true
     Log.trace("skin", "EbonAPI", "skin " .. tostring(saved) .. " is not installed, " .. DEFAULT .. " applies")
+    Problems.degrade(Problems.new("EbonAPI", "SKIN.FALLBACK", { skin = tostring(saved) }))
+  elseif fallen then
+    fallen = nil
+    Problems.restore("EbonAPI", "SKIN.FALLBACK")
   end
 
   local chain = chainOf(name, true)

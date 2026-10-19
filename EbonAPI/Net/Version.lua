@@ -125,7 +125,7 @@ local function notify(entry)
     text = text .. " " .. url
   end
 
-  Log.print(entry.name, text)
+  Log.trace("print", entry.name, text)
   EbonAPI:Emit("UPDATE_AVAILABLE", entry.name, latest, own, url)
 
   return true

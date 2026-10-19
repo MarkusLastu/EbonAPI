@@ -763,11 +763,19 @@ local function baseButton(parent, visual, template, name)
     self.hovered = true
     self:Visual()
     enterTip(self)
+
+    if self.onEnter then
+      self:onEnter()
+    end
   end)
   button:SetScript("OnLeave", function(self)
     self.hovered = false
     self:Visual()
     hideTip()
+
+    if self.onLeave then
+      self:onLeave()
+    end
   end)
   button:SetScript(template and "PostClick" or "OnClick", function(self, mouse)
     if not self.disabledState and self.onClick then
@@ -2409,7 +2417,11 @@ function Bricks.Container(name)
 
   function frame:Resize(width, height)
     self:SetWidth(width)
-    self:SetHeight(height)
+
+    if height then
+      self:SetHeight(height)
+    end
+
     layoutDecor(self)
   end
 

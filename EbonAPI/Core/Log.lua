@@ -12,8 +12,6 @@ Log.COLOR = {
   RESET = "|r",
 }
 
-local COLOR = Log.COLOR
-
 local function join(...)
   local count = select("#", ...)
 
@@ -28,16 +26,6 @@ local function join(...)
   end
 
   return concat(parts, " ")
-end
-
-local function emit(owner, color, text)
-  if not DEFAULT_CHAT_FRAME then
-    return
-  end
-
-  DEFAULT_CHAT_FRAME:AddMessage(
-    COLOR.PREFIX .. "[" .. (owner or "EbonAPI") .. "]" .. COLOR.RESET
-      .. " " .. color .. text .. COLOR.RESET)
 end
 
 local CAPACITY = 128
@@ -142,33 +130,115 @@ function Log.dump(limit, kind)
 end
 
 function Log.print(owner, ...)
-  emit(owner, COLOR.TEXT, join(...))
+  Log.trace("print", owner, join(...))
+end
+
+local function uncoded(kind, owner, ...)
+  local text = join(...)
+  local Problems = EbonAPI.Problems
+
+  Log.trace(kind, owner, text)
+  Problems.report(Problems.make(owner or "EbonAPI", "EBONAPI.UNCODED", { text = text }))
 end
 
 function Log.warn(owner, ...)
-  local text = join(...)
-
-  Log.trace("warn", owner, text)
-  emit(owner, COLOR.WARN, text)
+  uncoded("warn", owner, ...)
 end
 
 function Log.success(owner, ...)
-  emit(owner, COLOR.SUCCESS, join(...))
+  Log.trace("success", owner, join(...))
 end
 
 function Log.error(owner, ...)
-  local text = join(...)
-
-  Log.trace("error", owner, text)
-  Lib.display("[" .. (owner or "EbonAPI") .. "] " .. text)
+  uncoded("error", owner, ...)
 end
 
 function Log.debug(owner, ...)
-  if not Log.isDebug(owner) then
-    return
+  if Log.isDebug(owner) then
+    Log.trace("debug", owner, join(...))
+  end
+end
+
+local TRACE_CAPACITY = 32
+local rings = {}
+
+local function raw(value)
+  local kind = type(value)
+
+  if kind == "string" or kind == "number" or kind == "boolean" then
+    return value
   end
 
-  emit(owner, COLOR.MUTED, join(...))
+  if value == nil then
+    return nil
+  end
+
+  return kind
+end
+
+function Log.note(owner, kind, a, b)
+  local ring = rings[owner]
+
+  if not ring then
+    ring = { at = {}, kind = {}, a = {}, b = {}, cursor = 0, filled = 0 }
+    rings[owner] = ring
+  end
+
+  local cursor = ring.cursor % TRACE_CAPACITY + 1
+
+  ring.cursor = cursor
+  ring.at[cursor] = GetTime and GetTime() or 0
+  ring.kind[cursor] = kind
+  ring.a[cursor] = raw(a)
+  ring.b[cursor] = raw(b)
+
+  if ring.filled < TRACE_CAPACITY then
+    ring.filled = ring.filled + 1
+  end
+end
+
+function Log.recent(owner, limit)
+  local lines = {}
+  local ring = rings[owner]
+
+  if not ring then
+    return lines
+  end
+
+  local now = GetTime and GetTime() or 0
+  local index = ring.cursor
+
+  limit = limit or 10
+
+  for _ = 1, ring.filled do
+    if #lines >= limit then
+      break
+    end
+
+    local text = ring.a[index] ~= nil and tostring(ring.a[index]) or ""
+
+    if ring.b[index] ~= nil then
+      text = text .. " " .. tostring(ring.b[index])
+    end
+
+    lines[#lines + 1] = format("%6.1fs  %-5s  %-14s  %s", now - ring.at[index], ring.kind[index], owner, text)
+
+    index = index - 1
+
+    if index == 0 then
+      index = ring.filled
+    end
+  end
+
+  return lines
+end
+
+function Handle:Trace(kind, a, b)
+  if type(kind) ~= "string" or kind == "" then
+    error("api:Trace: kind must be a non-empty string", 2)
+  end
+
+  Log.note(self.addonName, kind, a, b)
 end
 
 function Handle:Print(...)

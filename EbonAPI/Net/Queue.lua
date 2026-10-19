@@ -5,9 +5,11 @@ local Queue = EbonAPI.Queue
 local Lib = EbonAPI.Lib
 local Log = EbonAPI.Log
 local Bus = EbonAPI.Bus
+local Problems = EbonAPI.Problems
 
 local type, pairs, error, tostring, pcall = type, pairs, error, tostring, pcall
 local match, gsub, find, lower, upper, char = string.match, string.gsub, string.find, string.lower, string.upper, string.char
+local concat = table.concat
 
 local SEND_INTERVAL = 0.15
 local PEER_CAP = 500
@@ -37,6 +39,7 @@ local mSeq, mCount, mKey, mBody = {}, {}, {}, {}
 local mTop, mFree = 0, 0
 
 local laneOf = {}
+local laneName = {}
 local laneLive = {}
 local laneCount = 0
 
@@ -52,22 +55,35 @@ local cTop = 0
 local smallTurn, bigTurn = 0, 0
 local seq, limit = 0, 0
 local held = false
-local cur, curLeft = 0, 0
+local cur, curLeft, curTotal = 0, 0, 0
 local bigLive = 0
 local pLive = 0
 
 local offlineUntil = {}
 local recentWhisper = {}
 local foreignWhisper = {}
+local foreignLeft = {}
+local addonWhisper = {}
 local foreignSwept = 0
+local lastText, lastAt, lastMasked
+local judged = {}
 local sending = false
 local watching = false
 
 Queue.sent = { server = 0, channel = 0, whisper = 0 }
 Queue.dropped = { offline = 0, full = 0, failed = 0 }
+Queue.hidden = { own = 0, addon = 0, unknown = 0 }
 
 local sent = Queue.sent
 local dropped = Queue.dropped
+
+Problems.declare("EbonAPI", "EBONAPI", {
+  ["QUEUE.FULL"] = { class = "refus", key = "addon", quiet = true },
+  ["QUEUE.PEER_OFFLINE"] = { class = "refus", key = "player", silent = true },
+  ["QUEUE.SEND_FAILED"] = { class = "echec", key = "addon", quiet = true },
+  ["QUEUE.STREAM_CUT"] = { class = "partiel", key = "addon", quiet = true },
+  ["QUEUE.LINE_HIDDEN"] = { class = "rejet" },
+})
 
 local function now()
   return (GetTime and GetTime()) or 0
@@ -118,33 +134,39 @@ end
 
 local function rawWhisper(prefix, target, text)
   if not SendAddonMessage then
-    return false
+    return false, "SendAddonMessage is not available"
   end
 
   sending = true
 
-  local ok = pcall(SendAddonMessage, prefix, text, "WHISPER", target)
+  local ok, err = pcall(SendAddonMessage, prefix, text, "WHISPER", target)
 
   sending = false
 
-  return ok
+  return ok, not ok and err or nil
 end
 
-local function noteForeign(kind, target)
-  if sending or (kind ~= "WHISPER" and (type(kind) ~= "string" or upper(kind) ~= "WHISPER")) then
-    return
+local function sweep(list, current)
+  for other, at in pairs(list) do
+    if current - at > ANSWER_WINDOW then
+      list[other] = nil
+    end
   end
+end
 
-  local me = UnitName and UnitName("player")
-
-  if target == me then
+-- Whispers EbonAPI did not queue. A chat whisper (SendChatMessage: the player's /w, a reply
+-- addon) keeps its "not found" line: one line per whisper the game could not deliver, counted.
+-- Every other "not found" line stays out of the chat: the whispers of EbonAPI, the addon messages
+-- of any other addon, and the ones nobody here accounts for. The player did not write them.
+local function noteForeign(kind, target, visible)
+  if sending or (kind ~= "WHISPER" and (type(kind) ~= "string" or upper(kind) ~= "WHISPER")) then
     return
   end
 
   local name = baseName(target)
   local key = name and fold(name)
 
-  if not key or (me and key == fold(me)) then
+  if not key then
     return
   end
 
@@ -152,16 +174,42 @@ local function noteForeign(kind, target)
 
   if current - foreignSwept > ANSWER_WINDOW then
     foreignSwept = current
+    sweep(foreignWhisper, current)
+    sweep(addonWhisper, current)
 
-    for other, at in pairs(foreignWhisper) do
-      if current - at > ANSWER_WINDOW then
-        foreignWhisper[other] = nil
+    for other in pairs(foreignLeft) do
+      if not foreignWhisper[other] then
+        foreignLeft[other] = nil
       end
     end
   end
 
+  if not visible then
+    addonWhisper[key] = current
+    return
+  end
+
+  if not foreignWhisper[key] or current - foreignWhisper[key] > ANSWER_WINDOW then
+    foreignLeft[key] = 0
+  end
+
   foreignWhisper[key] = current
+  foreignLeft[key] = foreignLeft[key] + 1
 end
+
+-- A chat whisper the game delivered comes back as CHAT_MSG_WHISPER_INFORM: no "not found" line is
+-- due for it any more.
+local function onInform(_, target)
+  local name = baseName(target)
+  local key = name and fold(name)
+  local left = key and foreignLeft[key]
+
+  if left and left > 0 then
+    foreignLeft[key] = left - 1
+  end
+end
+
+Bus.onCore("CHAT_MSG_WHISPER_INFORM", onInform)
 
 local offlineTemplate, offlinePattern
 
@@ -239,7 +287,7 @@ local function strip(heads, tails, cell, dones)
   return removed
 end
 
-local function purgeWhispers(target)
+local function purgeWhispers(target, lanes)
   local dest = playerDest[target]
 
   if not dest or dLive[dest] == 0 then
@@ -252,7 +300,13 @@ local function purgeWhispers(target)
 
   for _ = 1, dCells[dest] do
     cell = cNext[cell]
-    removed = removed + strip(cSmallHead, cSmallTail, cell, dones) + strip(cBigHead, cBigTail, cell, dones)
+    local own = strip(cSmallHead, cSmallTail, cell, dones) + strip(cBigHead, cBigTail, cell, dones)
+
+    removed = removed + own
+
+    if own > 0 and lanes then
+      lanes[#lanes + 1] = laneName[cLane[cell]]
+    end
   end
 
   if dBig[dest] > 0 then
@@ -316,17 +370,31 @@ onSystem = function(message)
 
   offlineUntil[key] = current + OFFLINE_HOLD
 
-  local removed = purgeWhispers(key)
+  local lanes = {}
+  local removed = purgeWhispers(key, lanes)
 
   dropped.offline = dropped.offline + removed
 
   Log.trace("offline", nil, name, removed, current)
+
+  if removed > 0 then
+    Problems.report(Problems.new("EbonAPI", "QUEUE.PEER_OFFLINE", {
+      player = name, addon = concat(lanes, ", "), purged = removed,
+    }))
+  end
+
   EbonAPI:Emit("PEER_OFFLINE", name, removed)
 end
 
-local function dispatch(kind, a, b, c)
+local function dispatch(kind, a, b, c, lane)
   local fn = senders[kind]
-  local ok = fn ~= nil and fn(a, b, c)
+  local ok, err
+
+  if fn ~= nil then
+    ok, err = fn(a, b, c)
+  else
+    err = "no sender is registered for " .. kind
+  end
 
   if ok then
     sent[kind] = (sent[kind] or 0) + 1
@@ -334,6 +402,12 @@ local function dispatch(kind, a, b, c)
   else
     dropped.failed = dropped.failed + 1
     Log.trace("fail", nil, kind, a)
+
+    Problems.report(Problems.new("EbonAPI", "QUEUE.SEND_FAILED", {
+      addon = lane, kind = kind, target = kind == "whisper" and b or kind,
+      error = tostring(err or "the send function returned false"),
+    }))
+
     EbonAPI:Emit("SEND_FAILED", kind, a, b)
   end
 
@@ -451,7 +525,8 @@ local function takeBig()
         if slot ~= 0 then
           dBigAt[dest] = cell
           bigTurn = dest
-          cur, curLeft = cell, mCount[slot]
+          curTotal = mCount[slot]
+          cur, curLeft = cell, curTotal
 
           return takePart()
         end
@@ -466,17 +541,18 @@ local function cut()
   local cell = cur
   local dest = cDest[cell]
   local removed = curLeft
-  local headA, headB, done
+  local total = curTotal
+  local headA, headB, headC, done
 
   for index = 1, removed do
     local slot = cBigHead[cell]
 
     cBigHead[cell] = mNext[slot]
 
-    local a, b, _, last = release(slot, cell)
+    local a, b, c, last = release(slot, cell)
 
     if index == 1 then
-      headA, headB = a, b
+      headA, headB, headC = a, b, c
     end
 
     done = last or done
@@ -493,7 +569,16 @@ local function cut()
   held = false
 
   Log.trace("cut", nil, dKind[dest], removed)
-  EbonAPI:Emit("SEND_FAILED", dKind[dest], headA, headB)
+
+  local kind = dKind[dest]
+  local op = match(kind == "whisper" and headC or headA, "^EAS:(%w+):")
+    or match(headA or "", "^EA1:[%w_]+:(%w+):")
+
+  Problems.report(Problems.new("EbonAPI", "QUEUE.STREAM_CUT", {
+    addon = laneName[cLane[cell]], op = op or "unknown", sent = total - removed, total = total,
+  }))
+
+  EbonAPI:Emit("SEND_FAILED", kind, headA, headB)
 
   if done then
     Lib.safeCall(done, false)
@@ -553,6 +638,7 @@ end
 
 local function forget()
   for name in pairs(laneOf) do
+    laneName[laneOf[name]] = nil
     laneOf[name] = nil
   end
 
@@ -574,7 +660,7 @@ end
 
 local function drain()
   if sFirst <= sLast then
-    dispatch("server", popServer())
+    dispatch("server", popServer(), nil, nil, "EbonAPI")
   else
     local slot, cell = takePeer()
 
@@ -588,7 +674,7 @@ local function drain()
         watch()
       end
 
-      local ok = dispatch(kind, a, b, c)
+      local ok = dispatch(kind, a, b, c, laneName[cLane[cell]])
 
       if done then
         Lib.safeCall(done, ok and true or false)
@@ -670,6 +756,7 @@ local function laneFor(lane)
 
   laneCount = index
   laneOf[lane] = index
+  laneName[index] = lane
   laneLive[index] = 0
 
   return index
@@ -799,13 +886,28 @@ local function submit(kind, a, b, c, parts, count, lane, done, key, body, single
   local index = laneOf[lane]
   local live = index and laneLive[index] or 0
 
+  local full
+
   if count == 1 then
     if pLive >= PEER_CAP + RESERVE then
-      dropped.full = dropped.full + 1
-      return false, "full"
+      full = "peers"
     end
-  elseif count > 1 and (count > PEER_CAP - pLive or (live > 0 and live + count > LANE_CAP)) then
+  elseif count > 1 then
+    if count > PEER_CAP - pLive then
+      full = "peers"
+    elseif live > 0 and live + count > LANE_CAP then
+      full = "lane"
+    end
+  end
+
+  if full then
     dropped.full = dropped.full + 1
+
+    Problems.report(Problems.new("EbonAPI", "QUEUE.FULL", {
+      addon = lane, queue = full, kind = kind, parts = count,
+      waiting = full == "lane" and live or pLive,
+    }))
+
     return false, "full"
   end
 
@@ -931,30 +1033,74 @@ end
 
 Queue.register("whisper", rawWhisper)
 
-function Queue.ownOffline(message)
-  local name = offlinePlayer(message)
-
-  if not name then
-    return false
-  end
-
-  local key = fold(name)
-  local current = now()
+-- Whether the line stays out of the chat, and why: "own" EbonAPI whispered the player,
+-- "addon" another addon did, "unknown" nobody here did. Only a chat whisper the player (or a
+-- reply addon) sent keeps its line, once per whisper.
+local function masked(key, current)
   local at = foreignWhisper[key]
 
-  if at and current - at <= ANSWER_WINDOW then
+  if at and current - at <= ANSWER_WINDOW and foreignLeft[key] > 0 then
+    foreignLeft[key] = foreignLeft[key] - 1
     return false
   end
 
   at = recentWhisper[key]
 
   if at and current - at <= MASK_WINDOW then
-    return true
+    return true, "own"
   end
 
   at = offlineUntil[key]
 
-  return at ~= nil and current < at
+  if at and current < at then
+    return true, "own"
+  end
+
+  at = addonWhisper[key]
+
+  if at and current - at <= ANSWER_WINDOW then
+    return true, "addon"
+  end
+
+  return true, "unknown"
+end
+
+-- Every chat frame that shows system lines runs the filter on the same line: the line is judged
+-- once, and the other frames get the same answer. A frame that asks again holds a new line.
+function Queue.ownOffline(message, frame)
+  local name = offlinePlayer(message)
+
+  if not name then
+    return false
+  end
+
+  local current = now()
+
+  if frame and message == lastText and current == lastAt and not judged[frame] then
+    judged[frame] = true
+    return lastMasked
+  end
+
+  for other in pairs(judged) do
+    judged[other] = nil
+  end
+
+  if frame then
+    judged[frame] = true
+  end
+
+  local hide, cause = masked(fold(name), current)
+
+  if hide then
+    local hidden = Queue.hidden
+
+    hidden[cause] = hidden[cause] + 1
+    Problems.reject("EbonAPI", "QUEUE.LINE_HIDDEN", { player = name, reason = cause })
+  end
+
+  lastText, lastAt, lastMasked = message, current, hide
+
+  return hide
 end
 
 function Queue.foreignCount()
@@ -970,7 +1116,7 @@ end
 if hooksecurefunc then
   if SendChatMessage then
     hooksecurefunc("SendChatMessage", function(_, kind, _, target)
-      noteForeign(kind, target)
+      noteForeign(kind, target, true)
     end)
   end
 
@@ -982,7 +1128,7 @@ if hooksecurefunc then
 end
 
 if ChatFrame_AddMessageEventFilter then
-  ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", function(_, _, message)
-    return Queue.ownOffline(message)
+  ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", function(frame, _, message)
+    return Queue.ownOffline(message, frame)
   end)
 end

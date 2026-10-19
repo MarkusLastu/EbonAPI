@@ -36,13 +36,23 @@ Whisper.drops = { tag = 0, bounds = 0, unknown = 0, expired = 0 }
 
 local drops = Whisper.drops
 
+EbonAPI.Problems.declare("EbonAPI", "EBONAPI", {
+  ["WHISPER.REJECTED"] = { class = "rejet" },
+})
+
+local function reject(reason, sender, sample)
+  drops[reason] = drops[reason] + 1
+
+  EbonAPI.Problems.reject("EbonAPI", "WHISPER.REJECTED", {
+    sender = sender, reason = reason, sample = sub(sample, 1, 60),
+  })
+end
+
 local function now()
   return (GetTime and GetTime()) or 0
 end
 
-local streams = Assembler.new("EbonAPI:whispers", STREAM_TIMEOUT, STREAM_SWEEP, PART_MAX, function()
-  drops.expired = drops.expired + 1
-end)
+local streams = Assembler.new("EbonAPI:whispers", STREAM_TIMEOUT, STREAM_SWEEP, PART_MAX, Channel.expiry(drops))
 
 local function clean(text)
   return match(text, "^|c%x%x%x%x%x%x%x%x%[[^%]]*%]|r%s*(.*)$") or text
@@ -76,14 +86,14 @@ local function onAddonMessage(prefix, text, distribution, sender)
     local entry = streamed[keyFor(prefix, op)]
 
     if not entry then
-      drops.unknown = drops.unknown + 1
+      reject("unknown", sender, text)
       return
     end
 
     local body, state = streams:add(sender .. "\1" .. prefix, op .. ":" .. id, tonumber(k), tonumber(n), slice, now())
 
     if state == "bounds" then
-      drops.bounds = drops.bounds + 1
+      reject("bounds", sender, text)
     elseif state == "progress" then
       entry.parts:fire(sender, id, op)
     elseif body then
@@ -102,7 +112,7 @@ local function onAddonMessage(prefix, text, distribution, sender)
     Log.trace("wisp", nil, prefix, len(text))
     list:fire(sender, text, distribution, prefix)
   elseif reserved then
-    drops.tag = drops.tag + 1
+    reject("tag", sender, text)
   end
 end
 

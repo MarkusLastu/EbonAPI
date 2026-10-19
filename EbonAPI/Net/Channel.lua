@@ -12,7 +12,7 @@ local Handle = EbonAPI.Handle
 local L = EbonAPI.L
 
 local type, tonumber, tostring, error, pcall = type, tonumber, tostring, error, pcall
-local match, find, lower, len, format = string.match, string.find, string.lower, string.len, string.format
+local match, find, lower, len, format, sub = string.match, string.find, string.lower, string.len, string.format, string.sub
 local ceil = math.ceil
 local remove = table.remove
 
@@ -47,6 +47,29 @@ Channel.drops = { tag = 0, bounds = 0, expired = 0 }
 
 local drops = Channel.drops
 
+EbonAPI.Problems.declare("EbonAPI", "EBONAPI", {
+  ["CHANNEL.REJECTED"] = { class = "rejet" },
+  ["STREAM.EXPIRED"] = { class = "rejet" },
+})
+
+function Channel.expiry(counts)
+  return function(owner, id, record)
+    counts.expired = counts.expired + 1
+
+    EbonAPI.Problems.reject("EbonAPI", "STREAM.EXPIRED", {
+      sender = match(owner, "^[^\1]*"), id = id, got = record.count, total = record.total,
+    })
+  end
+end
+
+local function reject(reason, sender, sample)
+  drops[reason] = drops[reason] + 1
+
+  EbonAPI.Problems.reject("EbonAPI", "CHANNEL.REJECTED", {
+    sender = sender, reason = reason, sample = sample and sub(sample, 1, 60),
+  })
+end
+
 local function now()
   return (GetTime and GetTime()) or 0
 end
@@ -55,9 +78,7 @@ local function myName()
   return (UnitName and UnitName("player")) or ""
 end
 
-local streams = Assembler.new("EbonAPI:assembly", ASSEMBLY_TIMEOUT, ASSEMBLY_SWEEP, PACKET_MAX, function()
-  drops.expired = drops.expired + 1
-end)
+local streams = Assembler.new("EbonAPI:assembly", ASSEMBLY_TIMEOUT, ASSEMBLY_SWEEP, PACKET_MAX, Channel.expiry(drops))
 
 local function keyFor(addon, op)
   return addon .. ":" .. op
@@ -207,7 +228,8 @@ tryJoin = function()
 
       if not warned and joinAttempts > JOIN_RETRY * JOIN_WARN then
         warned = true
-        Log.warn("EbonAPI", format(L.CHANNEL_JOIN_SLOW, NAME, ceil(joinAttempts / JOIN_RETRY)))
+        EbonAPI.Problems.degrade(EbonAPI.Problems.new("EbonAPI", "CHANNEL.NOT_JOINED",
+          { attempts = ceil(joinAttempts / JOIN_RETRY), seconds = joinAttempts * JOIN_TICK }))
       end
     end
   end
@@ -218,6 +240,12 @@ tryJoin = function()
     if not joined then
       joined = true
       joinedAt = now()
+
+      if warned then
+        warned = false
+        EbonAPI.Problems.restore("EbonAPI", "CHANNEL.NOT_JOINED")
+      end
+
       hide(NAME)
       Bus.untick("EbonAPI:channel")
       Bus.onCore("CHAT_MSG_CHANNEL", onChannelMessage)
@@ -393,14 +421,14 @@ onChannelMessage = function(text, sender, _, channelString, _, _, _, channelInde
   local start = find(text, "EA1:", 1, true)
 
   if not start then
-    drops.tag = drops.tag + 1
+    reject("tag", sender, text)
     return
   end
 
   local addon, op, number, k, n, body = match(text, "^([%w_]+):(%w+):(%d+)%.(%d+)/(%d+):(.*)$", start + 4)
 
   if not addon then
-    drops.tag = drops.tag + 1
+    reject("tag", sender, text)
     return
   end
 
@@ -420,7 +448,7 @@ onChannelMessage = function(text, sender, _, channelString, _, _, _, channelInde
   local whole, state = streams:add(sender, addon .. ":" .. op .. ":" .. number, tonumber(k), tonumber(n), body, at)
 
   if state == "bounds" then
-    drops.bounds = drops.bounds + 1
+    reject("bounds", sender, text)
     return
   end
 
@@ -451,11 +479,17 @@ local function channelReady()
 end
 
 local function rawChannel(text)
-  if not SendChatMessage or not index then
-    return false
+  if not SendChatMessage then
+    return false, "SendChatMessage is not available"
   end
 
-  return (pcall(SendChatMessage, text, "CHANNEL", nil, index))
+  if not index then
+    return false, "the channel has no index"
+  end
+
+  local ok, err = pcall(SendChatMessage, text, "CHANNEL", nil, index)
+
+  return ok, not ok and err or nil
 end
 
 local slices = {}

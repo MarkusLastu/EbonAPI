@@ -264,10 +264,10 @@ end
 function Perf.report(owner, label)
   local lines = Perf.measure(owner, label)
 
-  Log.print(owner, label and format(L.PERF_TITLE_LABEL, label) or L.PERF_TITLE)
+  Log.trace("print", owner, label and format(L.PERF_TITLE_LABEL, label) or L.PERF_TITLE)
 
   for i = 1, #lines do
-    Log.print(owner, lines[i])
+    Log.trace("print", owner, lines[i])
   end
 
   return lines

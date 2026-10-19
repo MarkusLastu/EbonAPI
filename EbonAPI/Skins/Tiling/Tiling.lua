@@ -39,6 +39,8 @@ EbonAPI:RegisterSkin("Tiling", {
     pageBg = { 0x000000, 0 },
     footerBg = { 0x000000, 0 },
     success = 0xA6E3A1,
+    danger = 0xF38BA8,
+    caution = 0xFAB387,
   },
 
   fonts = {
@@ -106,6 +108,7 @@ EbonAPI:RegisterSkin("Tiling", {
 
   kit = {
     icon = { border = "checkboxBorder" },
+    rows = { action = 20, fill = "selected", fillAlpha = 0.35, mark = "danger", markAlpha = 0.3, suffix = "muted" },
   },
 
   chat = {

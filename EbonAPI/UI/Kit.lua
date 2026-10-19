@@ -13,14 +13,15 @@ local Bricks = EbonAPI.Bricks
 local Windows = EbonAPI.Windows
 local Parameters = EbonAPI.Parameters
 local Handle = EbonAPI.Handle
+local Problems = EbonAPI.Problems
 local L = EbonAPI.L
 
 local type, pairs, ipairs, pcall, tostring, tonumber, setmetatable, error =
   type, pairs, ipairs, pcall, tostring, tonumber, setmetatable, error
 local floor, ceil, max, min, sin, cos, atan2, deg, rad =
   math.floor, math.ceil, math.max, math.min, math.sin, math.cos, math.atan2, math.deg, math.rad
-local format, find, gsub, lower, concat, sort =
-  string.format, string.find, string.gsub, string.lower, table.concat, table.sort
+local format, find, gsub, lower, concat, sort, sub =
+  string.format, string.find, string.gsub, string.lower, table.concat, table.sort, string.sub
 
 local S = Skins.value
 local paint = Palette.paint
@@ -45,8 +46,30 @@ local arrivals = 0
 local bindOwner = CreateFrame("Frame")
 local relayout
 
-local function report(err, owner)
-  Lib.report(err, owner)
+Problems.declare("EbonAPI", "EBONAPI", {
+  ["KIT.CALLBACK_FAILED"] = { class = "bug", key = "callback" },
+})
+
+function Kit.fail(code, err, owner, facts)
+  err = tostring(err)
+  EbonAPI.Log.trace("error", owner, err)
+
+  local addon = (owner == "EbonAPI" or EbonAPI._addons[owner]) and owner or "EbonAPI"
+  local problem = Problems.make(addon, code, facts, err)
+
+  problem.where = Problems.where(err)
+  problem.key = problem.where or problem.key
+  problem.stack = debugstack and debugstack(2, 8, 0) or nil
+  Problems.report(problem)
+  EbonAPI.Catch.forward(err)
+end
+
+local function report(err, owner, element, name)
+  if name then
+    Kit.fail("EBONAPI.KIT.CALLBACK_FAILED", err, owner, { element = element, callback = name, addon = owner })
+  else
+    Lib.report(err, owner)
+  end
 end
 
 local function trim(texture)
@@ -64,7 +87,7 @@ local function callback(element, name, ...)
     local ok, err = pcall(fn, element, ...)
 
     if not ok then
-      report(err, element.owner)
+      report(err, element.owner, element.kind, name)
     end
   end
 end
@@ -74,7 +97,7 @@ local function evaluate(element, value)
     local ok, result = pcall(value, element)
 
     if not ok then
-      report(result, element.owner)
+      report(result, element.owner, element.kind, "value")
       return nil
     end
 
@@ -88,7 +111,7 @@ local function ask(element, fn, ...)
   local ok, result = pcall(fn, ...)
 
   if not ok then
-    report(result, element.owner)
+    report(result, element.owner, element.kind, "callback")
     return nil
   end
 
@@ -253,7 +276,7 @@ local function showTip(element)
     local ok, err = pcall(spec.tip, lines, element)
 
     if not ok then
-      report(err, element.owner)
+      report(err, element.owner, element.kind, "tip")
     end
 
     GameTooltip:Show()
@@ -286,7 +309,7 @@ end
 
 Kit.click = click
 
-local function setBadge(element, text)
+local function setBadge(element, text, color)
   if text == nil or text == false or text == "" then
     if element.kitBadge then
       element.kitBadge:Hide()
@@ -308,10 +331,14 @@ local function setBadge(element, text)
     badge.disk = badge:CreateTexture(nil, "ARTWORK")
     badge.disk:SetTexture(Bricks.media("circle"))
     badge.disk:SetAllPoints(badge)
-    paint(badge.disk, "SetVertexColor", S("kit.badge.color"))
+    paint(badge.disk, "SetVertexColor", color or S("kit.badge.color"))
+    badge.color = color
     badge.text = Bricks.text(badge, "small", S("kit.badge.text"))
     badge.text:SetPoint("CENTER", badge, "CENTER", 0, 0)
     element.kitBadge = badge
+  elseif badge.color ~= color then
+    badge.color = color
+    paint(badge.disk, "SetVertexColor", color or S("kit.badge.color"))
   end
 
   badge.text:SetText(text == true and "" or tostring(text))
@@ -360,8 +387,8 @@ function common:Refresh()
   return self
 end
 
-function common:SetBadge(text)
-  setBadge(self, text)
+function common:SetBadge(text, color)
+  setBadge(self, text, color)
 
   return self
 end
@@ -805,6 +832,61 @@ local function checkAction(owner, action, level)
   end
 end
 
+local HOVERS = { "onEnter", "onLeave" }
+
+local function rowProblem(owner, item)
+  local actions = item.actions
+
+  if actions ~= nil then
+    if type(actions) ~= "table" or #actions > 3 then
+      return format("EbonAPI: %s: list item actions expects a list of 0 to 3 buttons, got %s", owner,
+        type(actions) == "table" and (#actions .. " buttons") or type(actions))
+    end
+
+    for _, action in ipairs(actions) do
+      if type(action) ~= "table" then
+        return format("EbonAPI: %s: list item actions expects tables, got %s", owner, type(action))
+      end
+
+      if action.onClick ~= nil and type(action.onClick) ~= "function" then
+        return format("EbonAPI: %s: list item action onClick expects a function, got %s", owner, type(action.onClick))
+      end
+    end
+  end
+
+  if item.fill ~= nil and (type(item.fill) ~= "number" or item.fill < 0 or item.fill > 1) then
+    return format("EbonAPI: %s: list item fill expects a number from 0 to 1, got %s", owner, tostring(item.fill))
+  end
+
+  if item.marked ~= nil and type(item.marked) ~= "boolean" then
+    return format("EbonAPI: %s: list item marked expects true or false, got %s", owner, type(item.marked))
+  end
+
+  if item.suffix ~= nil and type(item.suffix) ~= "string" and type(item.suffix) ~= "number" then
+    return format("EbonAPI: %s: list item suffix expects a text, got %s", owner, type(item.suffix))
+  end
+
+  for _, name in ipairs(HOVERS) do
+    if item[name] ~= nil and type(item[name]) ~= "function" then
+      return format("EbonAPI: %s: list item %s expects a function, got %s", owner, name, type(item[name]))
+    end
+  end
+
+  local tint = item.suffixColor
+
+  if tint ~= nil then
+    local text = type(tint) == "string" and THEME[tint]
+    local number = type(tint) == "table" and type(tint[1]) == "number" and type(tint[2]) == "number" and type(tint[3]) == "number"
+
+    if not text and not (number and tint[1] >= 0 and tint[1] <= 1 and tint[2] >= 0 and tint[2] <= 1 and tint[3] >= 0 and tint[3] <= 1) then
+      return format("EbonAPI: %s: list item suffixColor expects a palette color or { r, g, b } from 0 to 1, got %s", owner,
+        type(tint) == "table" and "a table" or tostring(tint))
+    end
+  end
+
+  return nil
+end
+
 local function colorProblem(owner, items)
   for _, item in ipairs(items) do
     if item.color ~= nil and not THEME[item.color] then
@@ -812,8 +894,14 @@ local function colorProblem(owner, items)
         concat(Palette.KEYS, ", "))
     end
 
+    local problem = rowProblem(owner, item)
+
+    if problem then
+      return problem
+    end
+
     if type(item.children) == "table" then
-      local problem = colorProblem(owner, item.children)
+      problem = colorProblem(owner, item.children)
 
       if problem then
         return problem
@@ -839,8 +927,63 @@ local function checkTarget(owner, spec, level)
   end
 end
 
+local SIDES = { LEFT = true, RIGHT = true }
+local MARGINS = { "left", "top", "right", "bottom" }
+
+local function isFrame(value)
+  return type(value) == "table" and type(value.IsShown) == "function"
+end
+
+local function checkAttach(owner, at, level)
+  level = level + 1
+
+  if type(at) ~= "table" then
+    error(format("EbonAPI: %s: attach expects a table, got %s", owner, type(at)), level)
+  end
+
+  if not isFrame(at.frame) then
+    error(format("EbonAPI: %s: attach.frame expects a frame, got %s", owner, type(at.frame)), level)
+  end
+
+  if at.anchor ~= nil and not isFrame(at.anchor) then
+    error(format("EbonAPI: %s: attach.anchor expects a frame, got %s", owner, type(at.anchor)), level)
+  end
+
+  if at.side ~= nil and not SIDES[at.side] then
+    error(format("EbonAPI: %s: attach.side expects LEFT or RIGHT, got %s", owner, tostring(at.side)), level)
+  end
+
+  if at.inside ~= nil and type(at.inside) ~= "boolean" then
+    error(format("EbonAPI: %s: attach.inside expects a boolean, got %s", owner, tostring(at.inside)), level)
+  end
+
+  if at.gap ~= nil and type(at.gap) ~= "number" then
+    error(format("EbonAPI: %s: attach.gap expects a number, got %s", owner, tostring(at.gap)), level)
+  end
+
+  if at.insets == nil then
+    return
+  end
+
+  if type(at.insets) ~= "table" then
+    error(format("EbonAPI: %s: attach.insets expects a table, got %s", owner, type(at.insets)), level)
+  end
+
+  for _, name in ipairs(MARGINS) do
+    local value = at.insets[name]
+
+    if value ~= nil and type(value) ~= "number" then
+      error(format("EbonAPI: %s: attach.insets.%s expects a number, got %s", owner, name, tostring(value)), level)
+    end
+  end
+end
+
 local function validate(owner, kind, spec, level)
   level = level + 1
+
+  if kind == "window" and spec.attach ~= nil then
+    checkAttach(owner, spec.attach, level)
+  end
 
   if (kind == "list" or kind == "tree") and type(spec.items) == "table" then
     checkItems(owner, spec.items, level)
@@ -1328,6 +1471,122 @@ KINDS.status = function(owner, parent, spec)
   return textKind(parent, spec, "muted")
 end
 
+local problemViews = setmetatable({}, WEAK)
+
+local function bandText(field, text, suffix, room)
+  field:SetText(text .. suffix)
+
+  local guard = 0
+
+  while room > 0 and (field:GetStringWidth() or 0) > room and #text > 1 and guard < 40 do
+    text = sub(text, 1, Lib.cutUtf8(text, 1, floor(#text * 0.85))) .. "..."
+    field:SetText(text .. suffix)
+    guard = guard + 1
+  end
+end
+
+KINDS.band = function(owner, parent, spec)
+  local band = CreateFrame("Frame", nil, parent)
+  local pad = S("kit.padding")
+
+  band:SetHeight(S("kit.band.height"))
+  band.shade = band:CreateTexture(nil, "BACKGROUND")
+  band.shade:SetTexture(Bricks.media("solid"))
+  band.shade:SetAllPoints(band)
+  paint(band.shade, "SetVertexColor", "danger")
+  band.shade:SetAlpha(S("kit.band.alpha"))
+  band.text = Bricks.text(band, "small", S("kit.band.text"))
+  band.text:SetPoint("LEFT", band, "LEFT", pad, 0)
+  band.text:SetPoint("RIGHT", band, "RIGHT", -pad, 0)
+  band.text:SetJustifyH("LEFT")
+  band:EnableMouse(true)
+  band.on = false
+  band:Hide()
+  band:SetScript("OnMouseUp", function(self)
+    local latest = self.latest
+
+    if latest then
+      Problems.open(self.addonName, Problems.keyOf(latest))
+    end
+  end)
+  band:SetScript("OnSizeChanged", function(self)
+    if self.on then
+      self:Refresh()
+    end
+  end)
+
+  function band:kitRefresh()
+    self.addonName = self.spec.addon or self.owner
+
+    local summary = Problems.summary(self.addonName)
+    local window = self.window
+    local latest = summary.severe and summary.latest or nil
+    local show = latest ~= nil and not (window and window.kitShaded)
+
+    self.latest = show and latest or nil
+
+    if show then
+      local more = summary.grave - 1
+
+      bandText(self.text, Problems.text(latest), more > 0 and format(" (+%d)", more) or "",
+        (self:GetWidth() or 0) - S("kit.padding") * 2)
+    end
+
+    if show ~= self.on then
+      self.on = show
+
+      if show then
+        self:Show()
+      else
+        self:Hide()
+      end
+
+      if self.onToggle then
+        self.onToggle(show)
+      end
+    end
+  end
+
+  problemViews[band] = "band"
+
+  return band
+end
+
+local function headBadge(frame)
+  local head = frame.head
+  local summary = Problems.summary(frame.owner, "badge")
+  local count = summary.count
+  local badge = head.kitBadge
+
+  if count == 0 and not badge then
+    return
+  end
+
+  setBadge(head, count > 0 and count or nil, summary.severe and "danger" or "caution")
+  badge = head.kitBadge
+  badge.count = count
+
+  if not badge.wired then
+    badge.wired = true
+    badge:ClearAllPoints()
+
+    if frame.titleCentered or S("header.controls") ~= "LEFT" then
+      badge:SetPoint("LEFT", frame.title, "RIGHT", S("kit.gap"), 0)
+    else
+      badge:SetPoint("RIGHT", frame.title, "LEFT", -S("kit.gap"), 0)
+    end
+
+    badge:EnableMouse(true)
+    badge:SetScript("OnMouseUp", function()
+      Problems.open(frame.owner)
+    end)
+    badge:SetScript("OnEnter", function(self)
+      Bricks.tip(self, self.count == 1 and L.BADGE_PROBLEM_ONE or format(L.BADGE_PROBLEMS, self.count or 0))
+    end)
+    badge:SetScript("OnLeave", Bricks.hideTip)
+  end
+end
+
 local function padOf(spec)
   return spec.padding or (spec.frame and S("kit.padding")) or 0
 end
@@ -1743,7 +2002,7 @@ local function lineOf(owner, item)
   return item.key and localized(owner, item.key) or tostring(item.text or "")
 end
 
-local function menuOf(element, data)
+local function menuOf(element, data, row)
   if data.menu then
     return data.menu
   end
@@ -1751,7 +2010,7 @@ local function menuOf(element, data)
   local menu = element.spec.menu
 
   if type(menu) == "function" then
-    return ask(element, menu, data)
+    return ask(element, menu, data, row)
   end
 
   return menu
@@ -1812,7 +2071,184 @@ local function listCheck(frame, row, item, rowHeight)
   row.label:SetJustifyH("LEFT")
 end
 
-local function listRender(frame)
+local listRender
+
+local function listFree(row)
+  if row.kitRoom then
+    restoreAnchors(row.label, row.kitRoom)
+    row.kitRoom = nil
+  end
+end
+
+local function rowBand(row, field, key, alpha)
+  local band = row[field]
+
+  if not band then
+    band = row:CreateTexture(nil, "ARTWORK")
+    band:SetTexture(Bricks.media("solid"))
+    row[field] = band
+  end
+
+  paint(band, "SetVertexColor", S(key))
+  band:SetAlpha(S(alpha))
+  band:ClearAllPoints()
+
+  return band
+end
+
+local function hover(row, name)
+  local item = row.kitItem
+  local fn = item and item[name]
+
+  if type(fn) == "function" then
+    local ok, err = pcall(fn, item, row)
+
+    if not ok then
+      report(err, row.kitOwner, "list", name)
+    end
+  end
+end
+
+local function hoverEnter(row)
+  hover(row, "onEnter")
+end
+
+local function hoverLeave(row)
+  hover(row, "onLeave")
+end
+
+local function rowAction(frame, row, action, index, right, height)
+  local list = row.kitActions
+
+  if not list then
+    list = {}
+    row.kitActions = list
+  end
+
+  local button = list[index]
+
+  if not button then
+    button = Bricks.create("button", row)
+    list[index] = button
+  end
+
+  button:SetLabel(lineOf(frame.owner, action))
+  button:SetSelected(action.pressed and true or false)
+  button:SetDisabledState(action.disabled and true or false)
+
+  local width = button:Fit(max(S("kit.rows.action"), button:TextWidth()))
+
+  button:SetHeight(min(S("kit.rows.action"), height))
+  button:ClearAllPoints()
+  button:SetPoint("RIGHT", row, "RIGHT", -right, 0)
+  button.tipTitle = action.tip and lineOf(frame.owner, action) or nil
+  button.tipBody = action.tip
+  button.onClick = function(_, mouse)
+    if type(action.onClick) == "function" then
+      local ok, err = pcall(action.onClick, action, mouse, button)
+
+      if not ok then
+        report(err, frame.owner, "list", "action")
+      end
+    end
+
+    listRender(frame)
+  end
+  button:Show()
+
+  return width
+end
+
+local function listTail(frame, row, item, rowHeight, rowWidth)
+  local actions = item.actions
+  local count = actions and #actions or 0
+  local fill = item.fill
+  local gap, right = S("kit.gap"), S("kit.inset")
+  local used = right
+
+  if count > 0 then
+    for index = count, 1, -1 do
+      used = used + rowAction(frame, row, actions[index], index, used, rowHeight) + gap
+    end
+  end
+
+  for index = count + 1, row.kitActions and #row.kitActions or 0 do
+    row.kitActions[index]:Hide()
+  end
+
+  if item.suffix ~= nil and item.suffix ~= "" then
+    local suffix = row.kitSuffix
+
+    if not suffix then
+      suffix = Bricks.text(row, "small", S("kit.rows.suffix"))
+      suffix:SetJustifyH("RIGHT")
+      row.kitSuffix = suffix
+    end
+
+    local tint = item.suffixColor
+
+    if type(tint) == "table" then
+      Palette.unpaint(suffix, "SetTextColor")
+      suffix:SetTextColor(tint[1], tint[2], tint[3], 1)
+    else
+      paint(suffix, "SetTextColor", tint or S("kit.rows.suffix"))
+    end
+
+    suffix:SetText(tostring(item.suffix))
+    suffix:ClearAllPoints()
+    suffix:SetPoint("RIGHT", row, "RIGHT", -used, 0)
+    suffix:Show()
+    used = used + suffix:GetStringWidth() + gap
+  elseif row.kitSuffix then
+    row.kitSuffix:Hide()
+  end
+
+  if used > right then
+    local label = row.label
+    local base = anchorsOf(label)
+    local left = false
+
+    for _, point in ipairs(base) do
+      left = left or point[1] == "LEFT"
+    end
+
+    row.kitRoom = base
+    label:ClearAllPoints()
+
+    if left then
+      for _, point in ipairs(base) do
+        if point[1] == "LEFT" then
+          label:SetPoint(point[1], point[2], point[3], point[4], point[5])
+        end
+      end
+    else
+      label:SetPoint("LEFT", row, "LEFT", S("kit.inset"), 0)
+      label:SetJustifyH("LEFT")
+    end
+
+    label:SetPoint("RIGHT", row, "RIGHT", -used, 0)
+  end
+
+  if fill and fill > 0 then
+    local band = rowBand(row, "kitFill", "kit.rows.fill", "kit.rows.fillAlpha")
+
+    band:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+    band:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+    band:SetWidth(max(1, rowWidth * fill))
+    band:Show()
+  elseif row.kitFill then
+    row.kitFill:Hide()
+  end
+
+  if item.marked then
+    rowBand(row, "kitMark", "kit.rows.mark", "kit.rows.markAlpha"):SetAllPoints(row)
+    row.kitMark:Show()
+  elseif row.kitMark then
+    row.kitMark:Hide()
+  end
+end
+
+function listRender(frame)
   local owner, spec = frame.owner, frame.spec
   local rows = frame.rowsPool
   local rowHeight = spec.rowHeight or S("kit.row")
@@ -1844,10 +2280,13 @@ local function listRender(frame)
     row:SetTextKey(item.color)
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     row.kitItem = item
+    row.kitOwner = owner
+    row.onEnter = item.onEnter and hoverEnter or nil
+    row.onLeave = item.onLeave and hoverLeave or nil
     row.tipTitle = item.tip and (item.key and localized(owner, item.key) or item.text) or nil
     row.tipBody = item.tip
     row.onClick = function(_, mouse)
-      frame:kitPick(item, mouse)
+      frame:kitPick(item, mouse, row)
     end
 
     if frame.kitTree then
@@ -1874,7 +2313,9 @@ local function listRender(frame)
       end
     end
 
+    listFree(row)
     listCheck(frame, row, item, rowHeight)
+    listTail(frame, row, item, rowHeight, width - depth * indent)
 
     if payload then
       row:RegisterForDrag("LeftButton")
@@ -1990,19 +2431,22 @@ local function newList(owner, parent, spec, tree)
     return self
   end
 
-  function frame:kitPick(item, mouse)
+  function frame:kitPick(item, mouse, row)
     if item.disabled then
       return
     end
 
-    local menu = mouse == "RightButton" and menuOf(self, item)
+    local right = mouse == "RightButton"
+    local menu = right and menuOf(self, item, row)
 
     if menu then
       Kit.openMenu(owner, menu)
       return
     end
 
-    if self.kitTree and item.children and #item.children > 0 then
+    local keep = right and (item.menu or self.spec.menu or type(item.onClick) == "function")
+
+    if self.kitTree and not keep and item.children and #item.children > 0 then
       self.opened[item] = not self:kitOpen(item)
       self:kitFlatten()
     end
@@ -2013,7 +2457,7 @@ local function newList(owner, parent, spec, tree)
       local ok, err = pcall(item.onClick, item, mouse)
 
       if not ok then
-        report(err, owner)
+        report(err, owner, "list", "onClick")
       end
     end
 
@@ -2028,7 +2472,7 @@ local function newList(owner, parent, spec, tree)
       local ok, err = pcall(item.onCheck, item, value)
 
       if not ok then
-        report(err, self.owner)
+        report(err, self.owner, self.kind, "onCheck")
       end
     end
 
@@ -2204,7 +2648,7 @@ KINDS.table = function(owner, parent, spec)
         local ok, err = pcall(data.onClick, data, mouse)
 
         if not ok then
-          report(err, owner)
+          report(err, owner, "list", "onClick")
         end
       end
 
@@ -2531,7 +2975,7 @@ KINDS.timer = function(owner, parent, spec)
         local ok, err = pcall(done, self)
 
         if not ok then
-          report(err, self.owner)
+          report(err, self.owner, self.kind, "onDone")
         end
       end
 
@@ -3064,7 +3508,7 @@ end
 local function canMove(frame)
   local mode = frame.spec and frame.spec.move or "ALWAYS"
 
-  if mode == "NONE" or mode == "HANDLE" or Parameters.value(nil, "locked") then
+  if frame.kitAttach or mode == "NONE" or mode == "HANDLE" or Parameters.value(nil, "locked") then
     return false
   end
 
@@ -3104,6 +3548,116 @@ local function settle(window, shown)
       window:Hide()
     end
   end)
+end
+
+local followers = setmetatable({}, WEAK)
+
+local function fold(window)
+  window.kitFolding = true
+  window:Hide()
+  window.kitFolding = nil
+end
+
+local function follow(window, host)
+  local members = followers[host]
+
+  if not members then
+    members = setmetatable({}, WEAK)
+    followers[host] = members
+    host:HookScript("OnShow", function()
+      for member in pairs(members) do
+        if member.kitMeant and not member:IsShown() then
+          member:Show()
+        end
+      end
+    end)
+    host:HookScript("OnHide", function()
+      for member in pairs(members) do
+        if member:IsShown() then
+          fold(member)
+        end
+      end
+    end)
+  end
+
+  members[window] = true
+end
+
+local function track(window)
+  window.kitTracked = true
+  window:HookScript("OnShow", function(self)
+    local at = self.kitAttach
+
+    if at and not self.kitFolding then
+      self.kitMeant = true
+
+      if not at.frame:IsShown() then
+        fold(self)
+      end
+    end
+  end)
+  window:HookScript("OnHide", function(self)
+    if self.kitAttach and not self.kitFolding then
+      self.kitMeant = false
+    end
+  end)
+end
+
+local function lay(window, at)
+  local host = at.frame
+  local right = at.side == "RIGHT"
+  local side = right and "RIGHT" or "LEFT"
+  local anchor, edge, x, top, bottom
+
+  window:ClearAllPoints()
+
+  if at.inside then
+    local insets = at.insets or {}
+
+    anchor, edge = at.anchor or host, side
+    x = right and 0 - (insets.right or 0) or (insets.left or 0)
+    top, bottom = 0 - (insets.top or 0), insets.bottom or 0
+    window:SetParent(host)
+    window:SetFrameStrata(host:GetFrameStrata())
+  else
+    anchor, edge = host, right and "LEFT" or "RIGHT"
+    x = right and (at.gap or 0) or 0 - (at.gap or 0)
+    top, bottom = 0, 0
+    window:SetParent(UIParent)
+    window:SetFrameStrata("DIALOG")
+  end
+
+  window:SetPoint("TOP" .. edge, anchor, "TOP" .. side, x, top)
+  window:SetPoint("BOTTOM" .. edge, anchor, "BOTTOM" .. side, x, bottom)
+end
+
+local function attachTo(window, at)
+  local old = window.kitAttach and window.kitAttach.frame
+
+  if old and old ~= at.frame then
+    followers[old][window] = nil
+  end
+
+  window.kitAttach = at
+
+  if not window.kitTracked then
+    track(window)
+  end
+
+  follow(window, at.frame)
+  lay(window, at)
+
+  if window.kitMeant == nil then
+    window.kitMeant = window:IsShown() and true or false
+  end
+
+  if not at.frame:IsShown() then
+    if window:IsShown() then
+      fold(window)
+    end
+  elseif window.kitMeant and not window:IsShown() then
+    window:Show()
+  end
 end
 
 function Kit.window(owner, id, spec)
@@ -3207,6 +3761,13 @@ function Kit.window(owner, id, spec)
 
   function frame:kitResize(width, height)
     local minimum = self.spec.minWidth or 0
+    local top = top + (self.kitBandRoom or 0)
+
+    if self.kitAreaTop ~= top then
+      self.kitAreaTop = top
+      self.kitArea:ClearAllPoints()
+      self.kitArea:SetPoint("TOPLEFT", self, "TOPLEFT", pad, -top)
+    end
 
     if self.title then
       local buttons = (self.close and self.close:IsShown() and self.close:GetWidth() or 0) + pad
@@ -3240,7 +3801,7 @@ function Kit.window(owner, id, spec)
     if self.kitShaded then
       self:Resize(outerWidth, self.head:GetHeight())
     else
-      self:Resize(outerWidth, outerHeight)
+      self:Resize(outerWidth, not self.kitAttach and outerHeight or nil)
     end
   end
 
@@ -3253,6 +3814,10 @@ function Kit.window(owner, id, spec)
       self.kitArea:Show()
     end
 
+    if self.band then
+      self.band:Refresh()
+    end
+
     relayout(self, false)
 
     return self
@@ -3261,6 +3826,12 @@ function Kit.window(owner, id, spec)
   function frame:kitRefresh()
     if self.title then
       self.title:SetText(textOf(self) or "")
+      headBadge(self)
+      problemViews[self] = "window"
+    end
+
+    if self.band then
+      self.band:Refresh()
     end
 
     for _, element in ipairs(self.headButtons or {}) do
@@ -3292,6 +3863,27 @@ function Kit.window(owner, id, spec)
     return self
   end
 
+  function frame:Attach(attach)
+    local merged = attach
+
+    if type(attach) == "table" then
+      merged = {}
+
+      for key, value in pairs(self.kitAttach or {}) do
+        merged[key] = value
+      end
+
+      for key, value in pairs(attach) do
+        merged[key] = value
+      end
+    end
+
+    checkAttach(owner, merged, 2)
+    attachTo(self, merged)
+
+    return self
+  end
+
   function frame:Toggle()
     local shown = self.kitWant
 
@@ -3314,11 +3906,32 @@ function Kit.window(owner, id, spec)
     return self
   end
 
-  Windows.place(frame, function(window)
-    local point = spec.point or { "CENTER" }
+  if spec.band ~= false then
+    local band = Kit.create(owner, "band", frame.head or CreateFrame("Frame", nil, frame), { addon = owner })
 
-    window:SetPoint(point[1], point[2] or UIParent, point[3] or point[1], point[4] or 0, point[5] or 0)
-  end)
+    band.window = frame
+    band:SetPoint("TOPLEFT", frame, "TOPLEFT", pad, -top)
+    band:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -pad, -top)
+    band.onToggle = function(show)
+      frame.kitBandRoom = show and band:GetHeight() + S("kit.spacing") or 0
+      relayout(frame, false)
+    end
+    frame.band = band
+
+    if band.on then
+      band.onToggle(true)
+    end
+  end
+
+  if spec.attach then
+    attachTo(frame, spec.attach)
+  else
+    Windows.place(frame, function(window)
+      local point = spec.point or { "CENTER" }
+
+      window:SetPoint(point[1], point[2] or UIParent, point[3] or point[1], point[4] or 0, point[5] or 0)
+    end)
+  end
 
   frame.kitTop = true
   frame:Refresh()
@@ -3380,7 +3993,7 @@ function Kit.openMenu(owner, items, anchor)
           local ok, err = pcall(item.onChange, value, item)
 
           if not ok then
-            report(err, owner)
+            report(err, owner, "menu", "onChange")
           end
         end
       end
@@ -3404,7 +4017,7 @@ function Kit.openMenu(owner, items, anchor)
       local ok, err = pcall(item.onClick, item)
 
       if not ok then
-        report(err, owner)
+        report(err, owner, "menu", "onClick")
       end
     end
   end)
@@ -3825,7 +4438,7 @@ function Kit.closeDialog(accepted)
     local ok, err = pcall(fn, value)
 
     if not ok then
-      report(err)
+      report(err, options.owner, "dialog", accepted and "onAccept" or "onCancel")
     end
   end
 
@@ -3889,7 +4502,7 @@ local function toastFrame()
       local ok, err = pcall(fn)
 
       if not ok then
-        report(err)
+        report(err, self.owner, "toast", "onClick")
       end
     end
   end)
@@ -3947,6 +4560,7 @@ function Kit.notify(owner, text, spec)
   toast.kitArrival = arrivals
   toast.expires = GetTime() + (spec.duration or S("kit.toast.duration"))
   toast.onClick = spec.onClick
+  toast.owner = owner
   toast:SetAlpha(1)
   toast:Show()
   stackToasts()
@@ -4003,6 +4617,21 @@ end)
 EbonAPI:On("LANGUAGE_CHANGED", function()
   Kit.refreshAll()
 end)
+
+local function problemsChanged(event, addon)
+  for view, kind in pairs(problemViews) do
+    if kind == "band" then
+      if view.addonName == addon then
+        view:Refresh()
+      end
+    elseif view.owner == addon and view.head then
+      headBadge(view)
+    end
+  end
+end
+
+EbonAPI:On("PROBLEM", problemsChanged)
+EbonAPI:On("PROBLEM_CLOSED", problemsChanged)
 
 local RESCALE = "EbonAPI.Kit.rescale"
 
@@ -4098,6 +4727,7 @@ function Handle:Dialog(spec)
     value = spec.value,
     onAccept = spec.onAccept,
     onCancel = spec.onCancel,
+    owner = owner,
   })
 end
 
@@ -4135,7 +4765,7 @@ function Handle:AfterCombat(fn)
     local ok, err = pcall(fn)
 
     if not ok then
-      report(err, owner)
+      report(err, owner, "afterCombat", "callback")
     end
   end)
 end

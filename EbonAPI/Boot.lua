@@ -13,6 +13,7 @@ local Version = EbonAPI.Version
 local Share = EbonAPI.Share
 local Ebonhold = EbonAPI.Ebonhold
 local State = EbonAPI.State
+local Problems = EbonAPI.Problems
 local Skins = EbonAPI.Skins
 local Bricks = EbonAPI.Bricks
 local Window = EbonAPI.Window
@@ -30,6 +31,7 @@ onAddonLoaded = function(name)
   Bus.offCore("ADDON_LOADED", onAddonLoaded)
 
   DB.attach(EbonAPIDB)
+  Problems.attach()
 
   Locale.applyPersisted()
   Skins.resolve()
@@ -43,6 +45,7 @@ end
 onPlayerLogin = function()
   Bus.offCore("PLAYER_LOGIN", onPlayerLogin)
 
+  safeCall(EbonAPI.Catch.login)
   safeCall(DB.bindCharacter)
   safeCall(Session.begin)
   safeCall(Ebonhold.Detect)

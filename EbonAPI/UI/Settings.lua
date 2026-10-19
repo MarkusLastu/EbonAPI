@@ -470,9 +470,36 @@ Settings.tree = {
       type = "group", order = 3, name = T("UI_ADDONS"),
       args = { none = noAddons() },
     },
+    problems = {
+      type = "group", order = 5, name = T("CENTER_TITLE"),
+      hidden = function()
+        local Center = EbonAPI.Center
+
+        if Center then
+          Center.ensure()
+        end
+
+        return false
+      end,
+      args = {},
+    },
     diagnostic = {
       type = "group", order = 4, name = T("UI_DIAGNOSTIC"),
       args = {
+        errors = {
+          type = "group", inline = true, order = 0, name = T("UI_ERRORS"),
+          args = {
+            network = {
+              type = "toggle", order = 1, name = T("UI_ERRORS_NETWORK"), desc = T("UI_ERRORS_NETWORK_DESC"),
+              get = function()
+                return EbonAPI.Problems.networkShown()
+              end,
+              set = function(_, value)
+                EbonAPI.Problems.setNetworkShown(value)
+              end,
+            },
+          },
+        },
         reports = {
           type = "group", inline = true, order = 1, name = T("UI_REPORTS"),
           args = {

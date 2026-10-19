@@ -311,19 +311,17 @@ function Handle:GetName()
 end
 
 local function versionRefusal(name, major, minor)
-  if DEFAULT_CHAT_FRAME then
-    local COLOR = EbonAPI.Log.COLOR
+  local Problems = EbonAPI.Problems
 
-    DEFAULT_CHAT_FRAME:AddMessage(COLOR.ERROR .. "[EbonAPI]" .. COLOR.RESET .. " " .. string.format(EbonAPI.L.VERSION_TOO_OLD,
-      EbonAPI.version, name, tostring(major) .. "." .. tostring(minor)))
-  end
+  Problems.report(Problems.make(name, "EBONAPI.ADDON.VERSION_TOO_OLD",
+    { addon = name, needs = tostring(major) .. "." .. tostring(minor), have = EbonAPI.version }))
 end
 
-local CONNECTION = { icon = "string", url = "string", updates = "boolean", version = "string" }
+local CONNECTION = { globals = "table", icon = "string", url = "string", updates = "boolean", version = "string" }
 
 local function connectionProblem(name, info)
   if type(info) ~= "table" then
-    return "the fourth argument must be a table (icon, updates, url, version), got " .. type(info)
+    return "the fourth argument must be a table (globals, icon, updates, url, version), got " .. type(info)
   end
 
   local keys = Lib.sortedKeys(info)
@@ -334,7 +332,7 @@ local function connectionProblem(name, info)
     local kind = CONNECTION[key]
 
     if not kind then
-      return 'unknown connection option "' .. tostring(key) .. '" (known: icon, updates, url, version)'
+      return 'unknown connection option "' .. tostring(key) .. '" (known: globals, icon, updates, url, version)'
     end
 
     if type(value) ~= kind then
@@ -421,6 +419,7 @@ function EbonAPI:NewAddon(name, needMajor, needMinor, info)
   if fresh then
     handle = setmetatable({ addonName = name }, Handle)
     self._addons[name] = handle
+    EbonAPI.Catch.declare(name, debugstack and debugstack(2, 1, 0) or "", info and info.globals)
   end
 
   if info ~= nil then

@@ -8,6 +8,7 @@ local Bricks = EbonAPI.Bricks
 local Parameters = EbonAPI.Parameters
 local Skins = EbonAPI.Skins
 local Version = EbonAPI.Version
+local Problems = EbonAPI.Problems
 local Window = EbonAPI.Window
 local Handle = EbonAPI.Handle
 local L = EbonAPI.L
@@ -149,12 +150,23 @@ local function titleOf(button)
   return EbonAPI.Settings.addonTitle(button.owner)
 end
 
+local function scopeOf(button)
+  if button ~= group and button.owner ~= OWNER then
+    return button.owner
+  end
+end
+
 local function describe(button, tooltip)
   local lines = Kit.lines(tooltip)
   local latest = Version.available(button.owner)
+  local count = Problems.summary(scopeOf(button), "badge").count
 
   if latest then
     lines:Add(format(L.UI_ADDON_UPDATE, latest), "heading")
+  end
+
+  if count > 0 then
+    lines:Add(count == 1 and L.MINIMAP_PROBLEM_ONE or format(L.MINIMAP_PROBLEMS, count), "text")
   end
 
   if button == group then
@@ -254,6 +266,12 @@ local function build(owner)
 end
 
 local function badgeOf(button)
+  local summary = Problems.summary(scopeOf(button), "badge")
+
+  if summary.count > 0 then
+    return summary.count, summary.severe and "danger" or "caution"
+  end
+
   if button == group then
     if Version.available(OWNER) then
       return true
@@ -277,6 +295,13 @@ local function badgeOf(button)
   return Version.available(button.owner) and true or nil
 end
 
+local function refreshBadge(button)
+  local value, color = badgeOf(button)
+
+  button.badgeValue = value
+  button:SetBadge(value, color)
+end
+
 local function refresh(button)
   local icon
 
@@ -288,8 +313,7 @@ local function refresh(button)
 
   button.iconPath = icon
   button.icon:SetTexture(icon)
-  button.badgeValue = badgeOf(button)
-  button:SetBadge(button.badgeValue)
+  refreshBadge(button)
 
   if button.broker then
     button.broker.icon = icon
@@ -544,6 +568,21 @@ function Buttons.refreshAll()
 
   Buttons.layout()
 end
+
+local function problemsChanged(_, addon)
+  local button = buttons[addon]
+
+  if button then
+    refreshBadge(button)
+  end
+
+  if group then
+    refreshBadge(group)
+  end
+end
+
+EbonAPI:On("PROBLEM", problemsChanged)
+EbonAPI:On("PROBLEM_CLOSED", problemsChanged)
 
 function Buttons.has(owner)
   return buttons[owner] ~= nil
