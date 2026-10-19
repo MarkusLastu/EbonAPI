@@ -40,6 +40,7 @@ The **Result** area shows the report you chose. **Status** and **Senders** are i
 | **Reports → Saved data** | a summary of the saved data, one line per addon |
 | **Reports → Opcodes** | the known opcodes, server to client then client to server |
 | **Reports → Senders** | the senders observed on the server bridge, each with its count, then a `strict = ` line; `no sender observed` when there is none |
+| **Errors → Show network errors** | shows on screen what EbonAPI always records in its journal: a player who went offline, a full send queue, a shared value that came late; off by default |
 | **Debug messages → All addons** | turns `api:Debug` output on for every addon |
 | **Debug messages → Addon**, **For the chosen addon** | turns it on for one addon; unavailable while **All addons** is on |
 | **Performance → Addon** | **All addons** or one addon |
