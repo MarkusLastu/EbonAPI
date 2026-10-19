@@ -163,70 +163,31 @@ function Ebonhold.Raw()
   return root()
 end
 
-function Ebonhold.Objectives()
-  return service("ObjectivesService")
-end
+local services = {
+  Objectives = "ObjectivesService",
+  ObjectivesUI = "ObjectivesUI",
+  Checkpoints = "CheckpointService",
+  Hardmode = "HardmodeService",
+  Perks = "PerkService",
+  PerkDatabase = "PerkDatabase",
+  PlayerRun = "PlayerRunService",
+  SkillTree = "SkillTree",
+  WorldMapBounds = "WorldMapBounds",
+  Orbs = "OrbService",
+  PerkUI = "PerkUI",
+  EchoJournal = "EchoJournal",
+  PerkDropSources = "PerkDropSources",
+  PerkDropSourceByGroup = "PerkDropSourceByGroup",
+}
 
-function Ebonhold.ObjectivesUI()
-  return service("ObjectivesUI")
-end
-
-function Ebonhold.Checkpoints()
-  return service("CheckpointService")
-end
-
-function Ebonhold.Hardmode()
-  return service("HardmodeService")
-end
-
-function Ebonhold.Perks()
-  return service("PerkService")
-end
-
-function Ebonhold.PerkDatabase()
-  return service("PerkDatabase")
-end
-
-function Ebonhold.PlayerRun()
-  return service("PlayerRunService")
-end
-
-function Ebonhold.SkillTree()
-  return service("SkillTree")
-end
-
-function Ebonhold.WorldMapBounds()
-  return service("WorldMapBounds")
-end
-
-function Ebonhold.Orbs()
-  return service("OrbService")
-end
-
-function Ebonhold.PerkUI()
-  return service("PerkUI")
-end
-
-function Ebonhold.EchoJournal()
-  return service("EchoJournal")
-end
-
-function Ebonhold.PerkDropSources()
-  return service("PerkDropSources")
-end
-
-function Ebonhold.PerkDropSourceByGroup()
-  return service("PerkDropSourceByGroup")
+for name, serviceName in pairs(services) do
+  Ebonhold[name] = function()
+    return service(serviceName)
+  end
 end
 
 function Ebonhold.OptionsService()
-  local svc = _G.ProjectEbonholdOptionsService
-
-  if type(svc) == "table" then
-    return svc
-  end
-
-  return nil, lack("ProjectEbonholdOptionsService")
+  return frame("ProjectEbonholdOptionsService")
 end
 
 function Ebonhold.PerkFrame()

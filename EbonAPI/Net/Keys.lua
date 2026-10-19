@@ -24,6 +24,7 @@ local NAME_ALLOWED = 'letters, digits and "_"'
 
 local store = nil
 local cachedBase = nil
+local global = nil
 local parts = {}
 local packets = {}
 local packetNumber = {}
@@ -46,6 +47,7 @@ local function base()
     cachedBase = held
     parts = {}
     packets = {}
+    global = nil
   end
 
   return held
@@ -70,6 +72,7 @@ local function stale(addon, name)
   local cached = packets[addon]
 
   parts[addon] = nil
+  global = nil
 
   if cached then
     cached[packetOf(name) + 1] = false
@@ -332,6 +335,14 @@ function Keys.fingerprint()
   end
 
   return concat(out), addons
+end
+
+function Keys.globalDigest()
+  if not global then
+    global = Hash.digest((Keys.fingerprint()))
+  end
+
+  return global
 end
 
 function Handle:SetShareKey(name, state)

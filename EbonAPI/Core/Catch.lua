@@ -3,7 +3,7 @@ EbonAPI.Catch = {}
 
 local Catch = EbonAPI.Catch
 
-local type, tostring, pcall, pairs, ipairs = type, tostring, pcall, pairs, ipairs
+local type, tostring, pcall, pairs = type, tostring, pcall, pairs
 local find, sub, lower, gsub, match, gmatch = string.find, string.sub, string.lower, string.gsub, string.match, string.gmatch
 
 local FOLDER = "addons[\\/]([^\\/]+)[\\/]"

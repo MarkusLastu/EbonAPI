@@ -5,7 +5,6 @@ local Version = EbonAPI.Version
 local Log = EbonAPI.Log
 local Bus = EbonAPI.Bus
 local DB = EbonAPI.DB
-local Channel = EbonAPI.Channel
 local Session = EbonAPI.Session
 local Handle = EbonAPI.Handle
 local L = EbonAPI.L
@@ -14,10 +13,7 @@ local type, tonumber, tostring, pairs, error = type, tonumber, tostring, pairs, 
 local match, gmatch, format, len, concat, sort = string.match, string.gmatch, string.format, string.len, table.concat, table.sort
 local random, max = math.random, math.max
 
-local NAME = "EbonAPI"
-local OP = "V"
 local TEXT_MAX = 20
-local ANNOUNCE_TICK = 1
 local REPLY_TICK = 1
 local REPLY_MIN, REPLY_MAX = 2, 8
 local REPLY_COOLDOWN = 30
@@ -30,7 +26,6 @@ local entries = {}
 local names = {}
 local store = nil
 local enabled = false
-local announced = false
 local replyAt, lastReplyAt = nil, nil
 local notified = {}
 
@@ -182,7 +177,7 @@ function Version.register(name, text)
   return true
 end
 
-local function line()
+function Version.line()
   local parts = {}
 
   for i = 1, #names do
@@ -201,35 +196,13 @@ local function line()
 end
 
 local function say()
-  local body = line()
-
-  if not body or not Channel.say(NAME, OP, body) then
+  if not Version.line() or not EbonAPI.Share.beacon() then
     return false
   end
 
   Version.said = Version.said + 1
 
   return true
-end
-
-local function tickAnnounce()
-  if announced or not Session.isNew() or not Channel.isJoined() or not line() then
-    Bus.untick("EbonAPI:version")
-    return
-  end
-
-  if say() then
-    announced = true
-    Bus.untick("EbonAPI:version")
-  end
-end
-
-local function onJoined()
-  if announced or not Session.isNew() then
-    return
-  end
-
-  Bus.tick("EbonAPI:version", ANNOUNCE_TICK, tickAnnounce)
 end
 
 local function tickReply()
@@ -266,7 +239,7 @@ local function learn(entry, text)
   notify(entry)
 end
 
-local function onVersion(_, body)
+function Version.onBeacon(_, body)
   Version.heard = Version.heard + 1
 
   local theirs = {}
@@ -313,7 +286,7 @@ local function onVersion(_, body)
     return
   end
 
-  if behind and not replyAt and line() then
+  if behind and not replyAt and Version.line() then
     replyAt = current + REPLY_MIN + random() * (REPLY_MAX - REPLY_MIN)
 
     if lastReplyAt then
@@ -346,7 +319,6 @@ function Version.enable()
     return false
   end
 
-  announced = false
   replyAt, lastReplyAt = nil, nil
 
   store = DB.store("EbonAPI", { account = { versions = {} } })
@@ -359,9 +331,6 @@ function Version.enable()
     settle(entry)
   end
 
-  Channel.on(NAME, OP, onVersion)
-  EbonAPI:On("CHANNEL_JOINED", onJoined)
-
   return true
 end
 
@@ -372,10 +341,6 @@ function Version.disable()
 
   enabled = false
 
-  Channel.off(NAME, OP, onVersion)
-  EbonAPI:Off("CHANNEL_JOINED", onJoined)
-
-  Bus.untick("EbonAPI:version")
   Bus.untick("EbonAPI:reply")
 
   for name in pairs(notified) do

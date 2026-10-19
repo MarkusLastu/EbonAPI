@@ -198,6 +198,8 @@ EbonAPI:RegisterSkin("Porcelain", {
     heading = { lines = "NONE", color = "muted", upper = true, height = 20 },
     group = { padding = 12, title = 20, titleX = 4, color = "title" },
     scroll = { thumb = 30, trackAlpha = 0 },
+    synthesis = { brick = "widgets", tile = { width = 130 }, value = { font = "large" } },
+    output = { brick = "grouped" },
   },
 
   kit = {
@@ -213,5 +215,291 @@ EbonAPI:RegisterSkin("Porcelain", {
 
   bricks = {
     close = { lights = lights },
+
+    -- The summary tiles as control-centre widget cards: a round icon badge (tinted by the level, with the
+    -- level marker on it) at the top left, the value in the large font under it, then the label and the
+    -- sub-text (two lines) in the muted colour. The grid is the common one.
+    synthesis = {
+      widgets = function(parent, B)
+        local Tiles = EbonAPI.Tiles
+        local MARGIN, SPACE = 8, 3
+        local TINT = { ok = "success", warn = "caution", bad = "danger", info = "muted", net = "focus" }
+        local look = {}
+
+        local labelRole, valueRole = EbonAPI.Skins.synthesisRoles(B)
+        local function dotSize()
+          return math.ceil(B.value("fonts." .. labelRole() .. ".size")) + 7
+        end
+
+        -- The badge is tinted by the level key; the marker is centred on it.
+        local function paintBadge(tile)
+          local size = tile.dot or dotSize()
+          local key = TINT[tile.item.level] or "muted"
+
+          tile.diskKey = key
+          B.paint(tile.disk, "SetVertexColor", key)
+          Tiles.paintMarker(tile, size)
+
+          if tile.marker:IsShown() then
+            local side = tile.marker:GetWidth()
+            local pad = math.floor((size - side) / 2)
+
+            tile.marker:ClearAllPoints()
+            tile.marker:SetPoint("TOPLEFT", tile.frame, "TOPLEFT", MARGIN + pad, -(MARGIN + pad))
+          end
+        end
+
+        local function paintBorder(box, tile)
+          local key = Tiles.borderKey(box, tile)
+
+          if key ~= tile.border then
+            B.frame(tile.frame, "large", B.value("widgets.synthesis.fill"), key)
+            tile.border = key
+          end
+        end
+
+        local function paintTexts(tile)
+          local item = tile.item
+
+          tile.label:SetText(item.label or "")
+          tile.value:SetText(item.value or "")
+          tile.sub:SetText(item.sub or "")
+          Tiles.setTip(tile)
+        end
+
+        function look.new(box)
+          local frame = CreateFrame("Button", nil, box)
+          local tile = { frame = frame, lookName = "widgets", margin = MARGIN, space = SPACE }
+
+          Tiles.wire(box, tile)
+          tile.disk = frame:CreateTexture(nil, "ARTWORK")
+          tile.disk:SetTexture(B.media("circle"))
+          tile.disk:SetAlpha(0.2)
+          tile.marker = frame:CreateTexture(nil, "OVERLAY")
+          tile.label = B.text(frame, labelRole(), "muted")
+          tile.value = B.text(frame, valueRole(), "text")
+          tile.sub = B.text(frame, labelRole(), "muted")
+
+          for _, fs in ipairs({ tile.label, tile.value, tile.sub }) do
+            fs:SetJustifyH("LEFT")
+            fs:SetJustifyV("TOP")
+            EbonAPI.Tiles.wrap(fs, false)
+          end
+
+          EbonAPI.Tiles.wrap(tile.sub, true)
+
+          return tile
+        end
+
+        -- Margins, badge, value line, label line, two sub-text lines, three gaps (from the font sizes).
+        function look.height(box)
+          local small = math.ceil(B.value("fonts." .. labelRole() .. ".size"))
+
+          return 2 * MARGIN + dotSize() + math.ceil(B.value("fonts." .. valueRole() .. ".size")) + 3 * small + 3 * SPACE
+        end
+
+        function look.paint(box, tile, width, height)
+          local frame = tile.frame
+          local lr, vr = labelRole(), valueRole()
+          local inner = math.max(1, width - 2 * MARGIN)
+          local small = math.ceil(B.value("fonts." .. lr .. ".size"))
+          local big = math.ceil(B.value("fonts." .. vr .. ".size"))
+          local dot = dotSize()
+
+          tile.border = nil
+          paintBorder(box, tile)
+          frame:SetWidth(width)
+          frame:SetHeight(height)
+
+          B.font(tile.label, lr)
+          B.font(tile.value, vr)
+          B.font(tile.sub, lr)
+          B.paint(tile.label, "SetTextColor", "muted")
+          B.paint(tile.value, "SetTextColor", "text")
+          B.paint(tile.sub, "SetTextColor", "muted")
+          paintTexts(tile)
+
+          tile.dot = dot
+          tile.disk:ClearAllPoints()
+          tile.disk:SetPoint("TOPLEFT", frame, "TOPLEFT", MARGIN, -MARGIN)
+          tile.disk:SetWidth(dot)
+          tile.disk:SetHeight(dot)
+          tile.disk:Show()
+          paintBadge(tile)
+
+          local top = MARGIN + dot + SPACE
+
+          tile.value:ClearAllPoints()
+          tile.value:SetPoint("TOPLEFT", frame, "TOPLEFT", MARGIN, -top)
+          tile.value:SetWidth(inner)
+          tile.value:SetHeight(big)
+          top = top + big + SPACE
+          tile.label:ClearAllPoints()
+          tile.label:SetPoint("TOPLEFT", frame, "TOPLEFT", MARGIN, -top)
+          tile.label:SetWidth(inner)
+          tile.label:SetHeight(small)
+          top = top + small + SPACE
+          tile.sub:ClearAllPoints()
+          tile.sub:SetPoint("TOPLEFT", frame, "TOPLEFT", MARGIN, -top)
+          tile.sub:SetWidth(inner)
+          tile.sub:SetHeight(2 * small)
+        end
+
+        function look.update(box, tile, old)
+          local item = tile.item
+
+          if item.label ~= old.label or item.value ~= old.value or item.sub ~= old.sub then
+            paintTexts(tile)
+          end
+
+          if item.level ~= old.level then
+            paintBadge(tile)
+          end
+
+          paintBorder(box, tile)
+        end
+
+        return Tiles.build(parent, look)
+      end,
+    },
+
+    -- The status sheet as grouped lists, like phone settings: the title in small muted capitals, then the rows of
+    -- the section as one group between hairlines (textures, drawn under the texts), the label on the left and the
+    -- value right-aligned before the level marker. The chips of a row stay on the left of the values column.
+    output = {
+      grouped = function(parent, B)
+        local Output = EbonAPI.Output
+        local T = Output.tools
+        local INSET, MARGIN, MIN_ROW, PAD = 10, 4, 26, 8
+        local look = { kinds = {} }
+
+        -- One hairline texture (a full-width pixel, borderDim), under the texts of the group.
+        local function hairline(widget, y, width)
+          local line = T.take(widget, "tex")
+
+          line:SetTexture(B.media("solid"))
+          line:SetDrawLayer("BACKGROUND")
+          line:SetTexCoord(0, 1, 0, 1)
+          line:SetAlpha(1)
+          B.paint(line, "SetVertexColor", "borderDim")
+          line:SetWidth(width)
+          line:SetHeight(1)
+          line:ClearAllPoints()
+          line:SetPoint("TOPLEFT", widget.scroll.child, "TOPLEFT", 0, -y)
+          line.level = "rule"
+        end
+
+        local function place(fs, x, y)
+          fs:ClearAllPoints()
+          fs:SetPoint("TOPLEFT", fs:GetParent(), "TOPLEFT", x, -y)
+        end
+
+        look.kinds.rows = function(widget, model, width)
+          widget.fiche = widget.fiche or { fs = {}, tex = {}, fr = {}, used = { fs = 0, tex = 0, fr = 0 } }
+          widget.sectionY = {}
+          widget.text:SetText("")
+          T.hideFiche(widget)
+
+          local child = widget.scroll.child
+          local gap = B.value("widgets.output.row.gap")
+          local size = B.value("widgets.output.marker.size")
+          local reserved = size + gap
+          local edge = width - INSET - reserved
+          local labelW = math.min(B.value("widgets.output.label.width"),
+            math.max(20, math.floor((width - INSET * 2 - reserved - gap * 2) / 2)))
+          local valueX = INSET + labelW + gap
+          local valueW = math.max(1, edge - valueX)
+          local y = 0
+
+          for index, section in ipairs(model.sections or {}) do
+            if index > 1 then
+              y = y + gap * 3
+            end
+
+            widget.sectionY[section.id] = y
+
+            local _, th = T.words(widget, INSET, y, math.max(1, width - INSET * 2), B.value("widgets.output.section.font"),
+              "muted", EbonAPI.Lib.upper(section.name or ""))
+
+            y = y + th + MARGIN
+            hairline(widget, y, width)
+            y = y + 1
+
+            for _, row in ipairs(section.rows or {}) do
+              local label, lh = T.words(widget, INSET, y, labelW, "normal", B.value("widgets.output.label.color"), row.label)
+              local tag, tagW, tagH = nil, 0, 0
+              local value, vh, ch = nil, 0, 0
+              local firstChip = widget.fiche.used.fr + 1
+
+              if row.chips then
+                ch = T.chips(widget, row.chips, valueX, y, valueW)
+              else
+                if row.tag then
+                  tag = T.take(widget, "fs")
+                  B.font(tag, B.value("kit.tag.font"))
+                  B.paint(tag, "SetTextColor", "caution")
+                  tag:SetWidth(4096)
+                  EbonAPI.Tiles.wrap(tag, false)
+                  tag:SetText(tostring(row.tag))
+                  tagW = math.min(math.ceil(tag:GetStringWidth() or 0), math.floor(valueW / 3))
+                  EbonAPI.Tiles.wrap(tag, true)
+                  tag:SetWidth(tagW)
+                  tag:SetJustifyH("RIGHT")
+                  tagH = math.ceil(tag:GetStringHeight() or 0)
+                  tagW = tagW + gap
+                end
+
+                value, vh = T.words(widget, valueX, y, math.max(1, valueW - tagW), "normal",
+                  B.value("widgets.output.value.color"), row.value)
+                value:SetJustifyH("RIGHT")
+              end
+
+              local rowH = math.max(MIN_ROW, math.max(size, lh, vh, tagH, ch) + PAD)
+
+              -- Content centred in the row.
+              place(label, INSET, y + math.floor((rowH - lh) / 2))
+
+              if value then
+                place(value, valueX, y + math.floor((rowH - vh) / 2))
+              end
+
+              if tag then
+                place(tag, edge - (tagW - gap), y + math.floor((rowH - tagH) / 2))
+              end
+
+              for n = firstChip, widget.fiche.used.fr do
+                local fr = widget.fiche.fr[n]
+                local _, _, _, fx, fy = fr:GetPoint()
+
+                fr:ClearAllPoints()
+                fr:SetPoint("TOPLEFT", child, "TOPLEFT", fx, fy - math.floor((rowH - ch) / 2))
+              end
+
+              if row.level and Output.MARKERS[row.level] then
+                T.marker(widget, row.level, width - INSET - size, y + math.floor((rowH - size) / 2), size)
+
+                local mk = widget.fiche.tex[widget.fiche.used.tex]
+
+                mk:SetDrawLayer("ARTWORK")
+                mk:SetTexCoord(0, 1, 0, 1)
+                mk:SetAlpha(1)
+              end
+
+              y = y + rowH
+              hairline(widget, y, width)
+              y = y + 1
+            end
+          end
+
+          return y
+        end
+
+        return Output.build(parent, look)
+      end,
+    },
+  },
+
+  board = {
+    header = { color = "text", line = "border" },
   },
 })

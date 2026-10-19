@@ -1,0 +1,69 @@
+## Interface: 30300
+## Title: EbonAPI - EbonBuilds
+## Version: 3.0.4
+## X-Website: https://github.com/Siphelis/EbonBuilds/releases/latest
+## Dependencies: EbonAPI
+## OptionalDeps: ProjectEbonhold
+## LoadOnDemand: 1
+## X-EbonAPI-Module: 1
+## X-EbonAPI-Name: EbonBuilds
+## SavedVariables: EbonAPIEbonBuildsDB
+## SavedVariablesPerCharacter: EbonAPIEbonBuildsCharDB
+## X-EbonAPI-Legacy: EbonBuilds
+## X-EbonAPI-Legacy-Variables: EbonBuildsDB=EbonAPIEbonBuildsDB
+## X-EbonAPI-Legacy-CharacterVariables: EbonBuildsCharDB=EbonAPIEbonBuildsCharDB
+
+core/Constants.lua
+core/Locale.lua
+problems/Boot.lua
+problems/Import.lua
+problems/Matrix.lua
+problems/Reroll.lua
+problems/Session.lua
+locales/frFR.lua
+locales/deDE.lua
+locales/esES.lua
+core/Timer.lua
+core/Events.lua
+core/Init.lua
+modules/build/Build.lua
+modules/data/SpecData.lua
+modules/data/Catalog.lua
+modules/weights/Weights.lua
+modules/protocol/Protocol.lua
+modules/draw/DrawHook.lua
+modules/matrix/Matrix.lua
+modules/matrix/Profiles.lua
+modules/matrix/Rating.lua
+modules/ui/Widgets.lua
+modules/ui/Stars.lua
+modules/ui/MinimapButton.lua
+modules/ui/MainWindow.lua
+modules/ui/ViewRouter.lua
+modules/ui/BuildList.lua
+modules/ui/EchoPicker.lua
+modules/ui/BuildWizard.lua
+modules/ui/BuildForm.lua
+modules/ui/Filters.lua
+modules/ui/EchoTableRows.lua
+modules/ui/EchoTable.lua
+modules/session/Session.lua
+modules/build/Scoring.lua
+modules/build/ExportImport.lua
+modules/sync/Sync.lua
+modules/ui/WeightsView.lua
+modules/ui/WelcomeView.lua
+modules/ui/BuildDetail.lua
+modules/ui/PublicBuildsView.lua
+modules/ui/SavedBuildsView.lua
+modules/ui/EchoStars.lua
+modules/ui/BonusView.lua
+modules/ui/SettingsView.lua
+modules/ui/BuildTabs.lua
+modules/ui/BuildOverview.lua
+modules/ui/Toast.lua
+modules/ui/SessionHistory.lua
+modules/automation/Automation.lua
+
+modules/reroll/Reroll.lua
+modules/reroll/Wishlist.lua

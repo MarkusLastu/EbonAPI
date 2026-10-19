@@ -391,3 +391,19 @@ end
 function Skins.pending()
   return Skins.chosen() ~= active
 end
+
+function Skins.synthesisRoles(B)
+  local function labelRole()
+    return B.value("widgets.synthesis.label.font")
+  end
+
+  local function valueRole()
+    return B.value("widgets.synthesis.value.font")
+  end
+
+  local function selected(box, tile)
+    return box.activeId ~= nil and tile.item.id == box.activeId
+  end
+
+  return labelRole, valueRole, selected
+end

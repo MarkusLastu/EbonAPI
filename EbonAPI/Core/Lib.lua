@@ -96,6 +96,14 @@ function Lib.bool(value)
   return value and true or false
 end
 
+function Lib.setShown(widget, shown)
+  if shown then
+    widget:Show()
+  else
+    widget:Hide()
+  end
+end
+
 function Lib.copper(value)
   return max(0, floor(Lib.num(value)))
 end

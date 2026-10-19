@@ -83,5 +83,157 @@ EbonAPI:RegisterSkin("AutoCallboard", {
     menu = { brick = "fill", inset = 6, title = { align = "CENTER" } },
     input = { brick = "default", field = 22 },
     group = { padding = 10, frame = "LARGE" },
+    synthesis = { brick = "cards", tile = { width = 210 } },
+    output = { brick = "default" },
+  },
+
+  board = {
+    header = { color = "heading", line = "borderDim" },
+  },
+
+  bricks = {
+    -- The summary tiles as cards: an icon disc (ring tinted by the level, marker in the centre) on the left,
+    -- the label and the value on one line, the sub-text under them. The grid is the common one.
+    synthesis = {
+      cards = function(parent, B)
+        local Tiles = EbonAPI.Tiles
+        local MARGIN, SPACE = 6, 6
+        local look = {}
+        local LEVEL_KEY = { ok = "success", warn = "caution", bad = "danger", info = "muted", net = "focus" }
+
+        local function mainRole()
+          return B.value("widgets.synthesis.value.font")
+        end
+
+        local function disc(box)
+          return math.ceil(B.value("fonts." .. mainRole() .. ".size")) + math.ceil(B.value("fonts.small.size"))
+        end
+
+        local function paintRing(tile)
+          tile.ringKey = LEVEL_KEY[tile.item.level] or "muted"
+          B.paint(tile.ring, "SetVertexColor", tile.ringKey)
+        end
+
+        local function paintMarker(tile)
+          Tiles.paintMarker(tile, tile.ring:GetHeight() * 0.6)
+          tile.marker:ClearAllPoints()
+          tile.marker:SetPoint("CENTER", tile.ring, "CENTER", 0, 0)
+        end
+
+        -- Texts, tooltip and the widths of the label (its measured text) and of the value (the rest).
+        local function paintTexts(tile)
+          local item = tile.item
+          local width = tile.cardWidth or 1
+          local x0 = MARGIN + tile.ring:GetWidth() + SPACE
+          local avail = math.max(1, width - x0 - MARGIN)
+
+          tile.label:SetText(item.label or "")
+          tile.value:SetText(item.value or "")
+          tile.sub:SetText(item.sub or "")
+          Tiles.setTip(tile)
+
+          local first = math.ceil(B.value("fonts." .. mainRole() .. ".size"))
+          -- Measured on an unconstrained width: the string width follows the field width when it is narrow.
+          tile.label:SetWidth(4096)
+
+          local lw = math.min(math.max(1, math.ceil(tile.label:GetStringWidth() or 0) + 1), math.max(1, avail - SPACE - 1))
+
+          tile.label:ClearAllPoints()
+          tile.label:SetPoint("TOPLEFT", tile.frame, "TOPLEFT", x0, -MARGIN)
+          tile.label:SetWidth(lw)
+          tile.label:SetHeight(first)
+          tile.value:ClearAllPoints()
+          tile.value:SetPoint("TOPLEFT", tile.frame, "TOPLEFT", x0 + lw + SPACE, -MARGIN)
+          tile.value:SetWidth(math.max(1, avail - lw - SPACE))
+          tile.value:SetHeight(first)
+          tile.sub:ClearAllPoints()
+          tile.sub:SetPoint("TOPLEFT", tile.frame, "TOPLEFT", x0, -(MARGIN + first))
+          tile.sub:SetWidth(avail)
+          tile.sub:SetHeight(math.ceil(B.value("fonts.small.size")))
+        end
+
+        function look.new(box)
+          local frame = CreateFrame("Button", nil, box)
+          local tile = { frame = frame, lookName = "cards", discKey = "well" }
+
+          Tiles.wire(box, tile)
+          tile.ring = frame:CreateTexture(nil, "BACKGROUND")
+          tile.disc = frame:CreateTexture(nil, "BORDER")
+          tile.marker = frame:CreateTexture(nil, "OVERLAY")
+          tile.ring:SetTexture(B.media("circle"))
+          tile.disc:SetTexture(B.media("circle"))
+          tile.label = B.text(frame, mainRole(), "text")
+          tile.value = B.text(frame, mainRole(), "muted")
+          tile.sub = B.text(frame, "small", "muted")
+
+          for _, fs in ipairs({ tile.label, tile.value, tile.sub }) do
+            fs:SetJustifyH("LEFT")
+            fs:SetJustifyV("TOP")
+            EbonAPI.Tiles.wrap(fs, false)
+          end
+
+          return tile
+        end
+
+        function look.height(box)
+          return disc(box) + 2 * MARGIN
+        end
+
+        function look.paint(box, tile, width, height)
+          local frame = tile.frame
+          local key = Tiles.borderKey(box, tile)
+          local size = disc(box)
+          local ring = 4
+
+          B.frame(frame, "small", B.value("widgets.synthesis.fill"), key)
+          tile.border = key
+          frame:SetWidth(width)
+          frame:SetHeight(height)
+          tile.cardWidth = width
+
+          tile.ring:SetWidth(size)
+          tile.ring:SetHeight(size)
+          tile.ring:ClearAllPoints()
+          tile.ring:SetPoint("TOPLEFT", frame, "TOPLEFT", MARGIN, -MARGIN)
+          tile.disc:SetWidth(size - ring)
+          tile.disc:SetHeight(size - ring)
+          tile.disc:ClearAllPoints()
+          tile.disc:SetPoint("CENTER", tile.ring, "CENTER", 0, 0)
+          B.paint(tile.disc, "SetVertexColor", tile.discKey)
+          paintRing(tile)
+
+          B.font(tile.label, mainRole())
+          B.font(tile.value, mainRole())
+          B.font(tile.sub, "small")
+          B.paint(tile.label, "SetTextColor", "text")
+          B.paint(tile.value, "SetTextColor", "muted")
+          B.paint(tile.sub, "SetTextColor", "muted")
+          paintTexts(tile)
+          paintMarker(tile)
+        end
+
+        function look.update(box, tile, old)
+          local item = tile.item
+
+          if item.label ~= old.label or item.value ~= old.value or item.sub ~= old.sub then
+            paintTexts(tile)
+          end
+
+          if item.level ~= old.level then
+            paintRing(tile)
+            paintMarker(tile)
+          end
+
+          local key = Tiles.borderKey(box, tile)
+
+          if key ~= tile.border then
+            B.frame(tile.frame, "small", B.value("widgets.synthesis.fill"), key)
+            tile.border = key
+          end
+        end
+
+        return Tiles.build(parent, look)
+      end,
+    },
   },
 })

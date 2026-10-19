@@ -93,3 +93,37 @@ function Opcodes.list()
 
   return table.concat(lines, "\n")
 end
+
+function Opcodes.counts()
+  local ss, cs = 0, 0
+
+  for _ in pairs(ssNames) do
+    ss = ss + 1
+  end
+
+  for _ in pairs(csNames) do
+    cs = cs + 1
+  end
+
+  return ss, cs
+end
+
+function Opcodes.rows()
+  local rows = {}
+
+  for _, entry in ipairs({ { "ss", ssNames }, { "cs", csNames } }) do
+    local codes = {}
+
+    for opcode in pairs(entry[2]) do
+      codes[#codes + 1] = opcode
+    end
+
+    table.sort(codes)
+
+    for index = 1, #codes do
+      rows[#rows + 1] = { dir = entry[1], code = codes[index], name = entry[2][codes[index]] }
+    end
+  end
+
+  return rows
+end

@@ -26,7 +26,7 @@ local BLOCK_ORDER = { "header", "nav", "page" }
 local INLINE = { toggle = true, range = true, select = true, color = true, execute = true, input = true }
 local POOLS = {
   toggle = "toggle", range = "range", select = "select", color = "color", execute = "execute",
-  input = "input", header = "heading", description = "text", group = "group",
+  input = "input", header = "heading", description = "text", group = "group", output = "output",
 }
 local TIPS = { back = "UI_BACK", forward = "UI_FORWARD", minimize = "UI_MINIMIZE", sidebar = "UI_SIDEBAR" }
 local HISTORY = 50
@@ -270,6 +270,17 @@ end
 
 function builders.description(node, parent, available, pools)
   local name = Options.name(node)
+
+  if node.option.view == "result" and pools.output then
+    local frame = pools.output:acquire(parent)
+
+    frame:SetWidth(available)
+    frame:SetModel(EbonAPI.Settings and EbonAPI.Settings.resultModel and EbonAPI.Settings.resultModel()
+      or { kind = "text", text = name })
+
+    return frame, available, frame:GetHeight(), true
+  end
+
   local widget = pools.description:acquire(parent)
   local height = widget:SetContent(name, available, node.option.fontSize)
 
@@ -654,19 +665,11 @@ local function stripTab(strip)
     Bricks.paint(self.text, "SetTextColor", self.active and S("page.strip.text") or S("page.strip.idleText"))
 
     if self.accent then
-      if self.active then
-        self.accent:Show()
-      else
-        self.accent:Hide()
-      end
+      Lib.setShown(self.accent, self.active)
     end
 
     if self.close then
-      if self.closable and (self.active or self.hovered) then
-        self.close:Show()
-      else
-        self.close:Hide()
-      end
+      Lib.setShown(self.close, self.closable and (self.active or self.hovered))
     end
   end
 
@@ -1159,11 +1162,7 @@ local function railItem(rail)
     self.icon:SetDesaturated(S("nav.rail.desaturate") and not active)
     self.icon:SetAlpha((active or self.hovered) and 1 or S("nav.rail.dim"))
 
-    if active and S("nav.rail.indicator") > 0 then
-      self.indicator:Show()
-    else
-      self.indicator:Hide()
-    end
+    Lib.setShown(self.indicator, active and S("nav.rail.indicator") > 0)
   end
 
   return item
@@ -1311,11 +1310,7 @@ local function layoutNav(right)
   panel:SetPoint("TOP" .. inner, nav, "TOP" .. inner, 0, 0)
   panel:SetPoint("BOTTOM" .. inner, nav, "BOTTOM" .. inner, 0, 0)
 
-  if navHidden then
-    panel:Hide()
-  else
-    panel:Show()
-  end
+  Lib.setShown(panel, not navHidden)
 
   if panel.divider then
     panel.divider:ClearAllPoints()
@@ -1409,11 +1404,7 @@ local function arrange()
   end
 
   if nav.panel.divider then
-    if navHere and pageHere and not navHidden then
-      nav.panel.divider:Show()
-    else
-      nav.panel.divider:Hide()
-    end
+    Lib.setShown(nav.panel.divider, navHere and pageHere and not navHidden)
   end
 
   if shaded then
@@ -1579,6 +1570,8 @@ local function showPage(owner, key)
     openTab(owner, key)
     mainView.scroll:SetOffset(0)
   end
+
+  EbonAPI:Emit("WINDOW_PAGE", owner, key)
 end
 
 local function anyPageShown()
@@ -1596,11 +1589,7 @@ local function refreshSearchHint()
     return
   end
 
-  if query == "" and not searchBox.focused then
-    searchHint:Show()
-  else
-    searchHint:Hide()
-  end
+  Lib.setShown(searchHint, query == "" and not searchBox.focused)
 end
 
 local function setQuery(text)
@@ -1886,11 +1875,7 @@ local function refreshFooter()
 
   local right = 0
 
-  if updates > 0 then
-    items.updates:Show()
-  else
-    items.updates:Hide()
-  end
+  Lib.setShown(items.updates, updates > 0)
 
   for _, item in ipairs({ items.updates, items.addons, items.language }) do
     if item:IsShown() then

@@ -9,15 +9,17 @@ local Queue = EbonAPI.Queue
 local Listeners = EbonAPI.Listeners
 local Assembler = EbonAPI.Assembler
 local Handle = EbonAPI.Handle
-local L = EbonAPI.L
 
 local type, tonumber, tostring, error, pcall = type, tonumber, tostring, error, pcall
-local match, find, lower, len, format, sub = string.match, string.find, string.lower, string.len, string.format, string.sub
+local match, find, lower, len, sub = string.match, string.find, string.lower, string.len, string.sub
 local ceil = math.ceil
-local remove = table.remove
+local remove, concat = table.remove, table.concat
 
 local NAME = "ebonapi"
 local TAG = "EA1"
+local GROUP_TAG = "EA2"
+-- Off while 2.1.x clients are around: they reject EA2 lines. Turn on when the client moves to the PTR.
+local GROUPING = false
 local PACKET_MAX = 16
 local ASSEMBLY_TIMEOUT = 30
 local ASSEMBLY_SWEEP = 5
@@ -25,8 +27,14 @@ local JOIN_TICK = 1
 local JOIN_RETRY = 10
 local JOIN_WARN = 3
 
+-- The client rejoins the channels of the last session on its own, seconds after login; a /join
+-- sent before registers the channel twice and breaks outgoing chat (worldChannel_service.lua:
+-- 104-126 of ProjectEbonhold). The first /join waits for that, at most RESTORE_WAIT seconds.
+local RESTORE_WAIT = 30
+
 Channel.NAME = NAME
 Channel.TAG = TAG
+Channel.GROUP_TAG = GROUP_TAG
 Channel.LINE_MAX = 255
 Channel.PACKET_MAX = PACKET_MAX
 Channel.ASSEMBLY_TIMEOUT = ASSEMBLY_TIMEOUT
@@ -39,6 +47,7 @@ local index = nil
 local joinAttempts = 0
 local joinedAt = nil
 local warned = false
+local restoreUntil = 0
 local serial = 0
 local baseName = Queue.baseName
 
@@ -78,7 +87,7 @@ local function myName()
   return (UnitName and UnitName("player")) or ""
 end
 
-local streams = Assembler.new("EbonAPI:assembly", ASSEMBLY_TIMEOUT, ASSEMBLY_SWEEP, PACKET_MAX, Channel.expiry(drops))
+local streams = Assembler.new("EbonAPI:assembly", ASSEMBLY_TIMEOUT, ASSEMBLY_SWEEP, PACKET_MAX, Channel.expiry(drops), true)
 
 local function keyFor(addon, op)
   return addon .. ":" .. op
@@ -216,7 +225,7 @@ end
 tryJoin = function()
   local id = resolve(NAME)
 
-  if not id then
+  if not id and now() >= restoreUntil then
     local attempt = joinAttempts
 
     joinAttempts = attempt + 1
@@ -324,6 +333,7 @@ function Channel.enable()
   end
 
   enabled = true
+  restoreUntil = now() + RESTORE_WAIT
 
   Bus.onCore("CHAT_MSG_CHANNEL_NOTICE", onNotice)
   Bus.onCore("CHANNEL_UI_UPDATE", recheck)
@@ -418,7 +428,59 @@ onChannelMessage = function(text, sender, _, channelString, _, _, _, channelInde
     return
   end
 
-  local start = find(text, "EA1:", 1, true)
+  Queue.heard(sender)
+
+  local single = find(text, GROUP_TAG .. ":", 1, true)
+  local start = find(text, TAG .. ":", 1, true)
+
+  if single and (not start or single < start) then
+    local records, count = {}, 0
+    local at = single + 4
+    local last = len(text)
+
+    while at <= last do
+      local size, from = match(text, "^(%d+):()", at)
+
+      size = size and tonumber(size)
+
+      if not size or size < 1 or from + size - 1 > last then
+        drops.tag = drops.tag + 1
+        return
+      end
+
+      local record = sub(text, from, from + size - 1)
+
+      if not match(record, "^[%w_]+:%w+:%d+%.1/1:") then
+        drops.tag = drops.tag + 1
+        return
+      end
+
+      count = count + 1
+      records[count] = record
+      at = from + size
+    end
+
+    if count == 0 then
+      drops.tag = drops.tag + 1
+      return
+    end
+
+    sender = baseName(sender)
+
+    if not sender or sender == myName() then
+      return
+    end
+
+    local now_ = now()
+
+    for index = 1, count do
+      local addon, op, _, _, _, body = match(records[index], "^([%w_]+):(%w+):(%d+)%.(%d+)/(%d+):(.*)$")
+
+      deliver(addon, op, sender, body, now_)
+    end
+
+    return
+  end
 
   if not start then
     reject("tag", sender, text)
@@ -487,15 +549,58 @@ local function rawChannel(text)
     return false, "the channel has no index"
   end
 
+  Queue.mark(true)
+
   local ok, err = pcall(SendChatMessage, text, "CHANNEL", nil, index)
 
+  Queue.mark(false)
+
   return ok, not ok and err or nil
+end
+
+local function mergeLines(texts, count)
+  local parts = { GROUP_TAG .. ":" }
+  local size = len(parts[1])
+
+  for index = 1, count do
+    local text = texts[index]
+
+    if type(text) ~= "string" or sub(text, 1, 4) ~= TAG .. ":" or not match(text, "^[%w_]+:%w+:%d+%.1/1:", 5) then
+      return nil
+    end
+
+    local record = sub(text, 5)
+    local piece = len(record) .. ":" .. record
+
+    size = size + len(piece)
+
+    if size > Channel.LINE_MAX then
+      return nil
+    end
+
+    parts[index + 1] = piece
+  end
+
+  return concat(parts)
 end
 
 local slices = {}
 
 function Channel.bodyMax(addon, op)
   return PACKET_MAX * (Channel.LINE_MAX - len(TAG .. ":" .. addon .. ":" .. op .. ":999999.") - 6)
+end
+
+function Channel.packets(addon, op, body)
+  local head = TAG .. ":" .. addon .. ":" .. op .. ":" .. (serial % 999999 + 1) .. "."
+  local budget = Channel.LINE_MAX - len(head) - 6
+
+  if budget < 1 or ceil(len(body) / budget) > PACKET_MAX then
+    return nil
+  end
+
+  local _, count = Lib.splitUtf8(body, budget, slices)
+
+  return count <= PACKET_MAX and count or nil
 end
 
 function Channel.say(addon, op, body, done)
@@ -577,7 +682,7 @@ function Channel.whisper(prefix, target, text, done, lane)
   return Queue.push("whisper", prefix, target, text, done, lane or prefix)
 end
 
-function Channel.whisperAll(prefix, target, parts, count, lane, key, body, single)
+function Channel.whisperAll(prefix, target, parts, count, lane, key, body, single, done)
   count = count or #parts
   lane = lane or prefix
 
@@ -599,7 +704,7 @@ function Channel.whisperAll(prefix, target, parts, count, lane, key, body, singl
     key, body = false, parts[1]
   end
 
-  local ok, why = Queue.pushAll("whisper", prefix, target, parts, count, lane, nil, key, body, single)
+  local ok, why = Queue.pushAll("whisper", prefix, target, parts, count, lane, done, key, body, single)
 
   if ok then
     return true, why
@@ -660,6 +765,6 @@ EbonAPI:AddTeardown(function(handle)
   end
 end)
 
-Queue.register("channel", rawChannel, channelReady)
+Queue.register("channel", rawChannel, channelReady, GROUPING and mergeLines or nil)
 
 EbonAPI:DeclareSticky("CHANNEL_JOINED")

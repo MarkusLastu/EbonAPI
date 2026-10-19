@@ -11,7 +11,7 @@ local Problems = EbonAPI.Problems
 local Lib = EbonAPI.Lib
 local L = EbonAPI.L
 
-local ipairs, pcall, tostring, type, pairs = ipairs, pcall, tostring, type, pairs
+local ipairs, pcall, type, pairs = ipairs, pcall, type, pairs
 local max, floor = math.max, math.floor
 local format, sub = string.format, string.sub
 local sort = table.sort
@@ -211,11 +211,7 @@ local function render(alert)
   alert.copy:ClearAllPoints()
   alert.copy:SetPoint("LEFT", alert.view, "RIGHT", gap, 0)
 
-  if quietKind then
-    alert.copy:Hide()
-  else
-    alert.copy:Show()
-  end
+  Lib.setShown(alert.copy, not quietKind)
 
   alert:SetWidth(width)
 

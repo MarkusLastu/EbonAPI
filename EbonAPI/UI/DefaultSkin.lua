@@ -1,3 +1,4 @@
+local Lib = EbonAPI.Lib
 local PANEL = "Interface\\Buttons\\UI-Panel-Button-"
 local SLICES = { { 0, 0.09375 }, { 0.09375, 0.53125 }, { 0.53125, 0.625 } }
 local CAP = 12
@@ -15,6 +16,14 @@ local function panelButton(parent, B)
 
     for _, part in ipairs(self.parts) do
       part:SetTexture(PANEL .. state)
+
+      -- A toned button (the accept of a dangerous dialog) tints the game's art with its tone.
+      if self.toneBg then
+        B.paint(part, "SetVertexColor", self.toneBg)
+      else
+        B.unpaint(part, "SetVertexColor")
+        part:SetVertexColor(1, 1, 1)
+      end
     end
 
     B.paint(self.label, "SetTextColor", text)
@@ -76,6 +85,7 @@ EbonAPI:RegisterSkin("Azeroth", {
   palette = {
     bg = 0xFFFFFF,
     bgSoft = { 0x0C0C1A, 0.9 },
+    well = { 0x0C0C1A, 0.9 },
     card = { 0x191919, 0.6 },
     border = 0xFFFFFF,
     borderDim = 0x666666,
@@ -291,6 +301,23 @@ EbonAPI:RegisterSkin("Azeroth", {
       brick = "default", height = 22, gap = 8, lines = "BOTH", size = 1, upper = false, color = "heading",
     },
     text = { brick = "default", extra = 4 },
+    output = {
+      brick = "stats", height = 300, padding = 8, frame = "SMALL", font = "normal", fill = "well",
+      border = "borderDim",
+      section = { color = "heading", font = "normal" },
+      label = { color = "muted", width = 130 },
+      value = { color = "text" },
+      row = { gap = 4 },
+      marker = { size = 14 },
+      log = { time = 56, owner = 110, tint = 0.12, gap = 2 },
+      toolbar = { gap = 6, search = 160 },
+      ops = { dir = 64, code = 56 },
+    },
+    synthesis = {
+      brick = "slots", tile = { width = 150, height = 54 }, gap = 6,
+      label = { font = "small" }, value = { font = "normal" }, group = { color = "heading" },
+      fill = "card", border = "borderDim", selected = "focus",
+    },
     group = {
       brick = "card", padding = 12, title = 18, titleX = 2,
       upper = false, color = "heading", font = "normal", frame = "SMALL",
@@ -314,12 +341,18 @@ EbonAPI:RegisterSkin("Azeroth", {
       color = "checkbox", border = "buttonBorder", hover = "buttonHover", checked = "checked",
     },
     badge = { size = 14, level = 3, color = "focus", text = "selectedText" },
+    tag = { color = "borderDim", text = "text", font = "small", padding = 8 },
+    questlog = { check = 18 },
     progress = { height = 14, color = "checked", background = "bgSoft", border = "borderDim" },
     row = 20,
-    rows = { action = 18, fill = "checked", fillAlpha = 0.3, mark = "danger", markAlpha = 0.2, suffix = "muted" },
+    rows = {
+      action = 18, fill = "checked", fillAlpha = 0.3, mark = "danger", markAlpha = 0.2, suffix = "muted",
+      medium = { height = 24, font = "normal" }, large = { height = 30, font = "large" },
+    },
     slot = 24,
     indent = 12,
     list = 200,
+    collection = { color = "bgSoft", border = "borderDim", padding = 4 },
     scroll = { width = 320, height = 240 },
     table = { row = 18, sort = 8, column = 20, selected = "selected", hover = "rowHover" },
     toast = { width = 260, duration = 4, top = 120, icon = 24, fade = 0.5 },
@@ -337,6 +370,13 @@ EbonAPI:RegisterSkin("Azeroth", {
       width = 320, copy = 80, button = 80, choices = 6, offset = 120,
       title = { font = "normal", color = "heading", align = "CENTER" },
       field = { color = "bgSoft", border = "borderDim" },
+      wide = 440,
+      rich = {
+        padding = 16, spacing = 10,
+        title = { font = "large", color = "heading", align = "LEFT" },
+        text = { font = "small", color = "muted", align = "LEFT" },
+      },
+      danger = { color = "danger", border = "danger" },
     },
     minimap = {
       brick = "native", size = 31, inset = 4, ring = 2, offset = 10, corner = 10, angle = 225,
@@ -346,6 +386,14 @@ EbonAPI:RegisterSkin("Azeroth", {
     combatAlpha = 0.3,
     animation = 0.15,
     rescale = { delay = 0.01 },
+  },
+
+  board = {
+    note = { font = "small" },
+    header = { height = 20, font = "small", color = "heading", line = "heading", fold = 0.3, room = 8 },
+    row = { height = 46, gap = 4, icon = 30, font = "normal" },
+    card = { brick = "default" },
+    cardHeader = { brick = "default" },
   },
 
   chat = {
@@ -489,17 +537,9 @@ EbonAPI:RegisterSkin("Azeroth", {
         end)
 
         function row:Visual()
-          if self.value then
-            self.mark:Show()
-          else
-            self.mark:Hide()
-          end
+          Lib.setShown(self.mark, self.value)
 
-          if self.hovered and not self.disabledState then
-            self.glow:Show()
-          else
-            self.glow:Hide()
-          end
+          Lib.setShown(self.glow, self.hovered and not self.disabledState)
         end
 
         row:SetValue(false)
@@ -521,6 +561,284 @@ EbonAPI:RegisterSkin("Azeroth", {
 
           return {}
         end)
+      end,
+    },
+
+    -- The summary tiles as bag slots: a 40 px square (marker in the centre, counter at the bottom right)
+    -- with the label under it; the full value and the sub-text are in the tooltip.
+    synthesis = {
+      slots = function(parent, B)
+        local Tiles = EbonAPI.Tiles
+        local SQUARE, CELL, LEAD, COUNTER = 40, 84, 4, 2
+        local look = {}
+
+        local labelRole = EbonAPI.Skins.synthesisRoles(B)
+        local function counterOf(item)
+          local token = string.match(item.value or "", "^[%d][%d%.,]*")
+
+          return token and string.gsub(token, "[%.,]+$", "") or nil
+        end
+
+        local function paintCounter(tile)
+          local token = counterOf(tile.item)
+
+          if token then
+            tile.count:SetText(token)
+            tile.count:Show()
+          else
+            tile.count:SetText("")
+            tile.count:Hide()
+          end
+        end
+
+        local function paintMarker(tile)
+          Tiles.paintMarker(tile, SQUARE * 0.6)
+          tile.marker:ClearAllPoints()
+          tile.marker:SetPoint("CENTER", tile.slot, "CENTER", 0, 0)
+        end
+
+        local function paintTexts(tile)
+          local item = tile.item
+
+          tile.label:SetText(item.label or "")
+          tile.value:SetText(item.value or "")
+          tile.sub:SetText(item.sub or "")
+          paintCounter(tile)
+          Tiles.setTip(tile)
+        end
+
+        function look.new(box)
+          local frame = CreateFrame("Button", nil, box)
+          local slot = CreateFrame("Frame", nil, frame)
+          local tile = { frame = frame, slot = slot, lookName = "slots", fillKey = "well" }
+
+          Tiles.wire(box, tile)
+          slot:SetWidth(SQUARE)
+          slot:SetHeight(SQUARE)
+          slot:SetPoint("TOPLEFT", frame, "TOPLEFT", (CELL - SQUARE) / 2, 0)
+          tile.marker = slot:CreateTexture(nil, "OVERLAY")
+          tile.count = B.text(slot, "small", "text")
+          tile.count:SetJustifyH("RIGHT")
+          tile.count:SetPoint("BOTTOMRIGHT", slot, "BOTTOMRIGHT", -COUNTER, COUNTER)
+          tile.label = B.text(frame, labelRole(), "muted")
+          tile.label:SetJustifyH("CENTER")
+          tile.label:SetJustifyV("TOP")
+          -- Kept for the readers of tile.value / tile.sub, never shown: the tooltip carries them.
+          tile.value = B.text(frame, labelRole(), "text")
+          tile.sub = B.text(frame, labelRole(), "muted")
+          tile.value:Hide()
+          tile.sub:Hide()
+
+          return tile
+        end
+
+        function look.height(box)
+          return SQUARE + LEAD + 2 * math.ceil(B.value("fonts." .. labelRole() .. ".size"))
+        end
+
+        function look.paint(box, tile, width, height)
+          local frame = tile.frame
+          local key = Tiles.borderKey(box, tile)
+
+          frame:SetWidth(width)
+          frame:SetHeight(height)
+          B.frame(tile.slot, "small", tile.fillKey, key)
+          tile.border = key
+          B.font(tile.count, "small")
+          B.paint(tile.count, "SetTextColor", "text")
+          B.font(tile.label, labelRole())
+          B.paint(tile.label, "SetTextColor", "muted")
+          EbonAPI.Tiles.wrap(tile.label, true)
+          tile.label:ClearAllPoints()
+          tile.label:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -(SQUARE + LEAD))
+          tile.label:SetWidth(width)
+          paintTexts(tile)
+          tile.label:SetHeight(Tiles.lineHeight(tile.label, labelRole()))
+          paintMarker(tile)
+        end
+
+        function look.update(box, tile, old)
+          local item = tile.item
+
+          if item.label ~= old.label or item.value ~= old.value or item.sub ~= old.sub then
+            paintTexts(tile)
+            tile.label:SetHeight(Tiles.lineHeight(tile.label, labelRole()))
+          end
+
+          if item.level ~= old.level then
+            paintMarker(tile)
+          end
+
+          local key = Tiles.borderKey(box, tile)
+
+          if key ~= tile.border then
+            B.frame(tile.slot, "small", tile.fillKey, key)
+            tile.border = key
+          end
+        end
+
+        -- Cells of a fixed width, laid out from the left under the group label.
+        function look.layout(box)
+          local width = math.max(1, box.boxWidth)
+          local gap = B.value("widgets.synthesis.gap")
+          local cols = math.max(1, math.floor((width + gap) / (CELL + gap)))
+          local cellHeight = look.height(box)
+          local role = labelRole()
+          local y = 0
+
+          for index, group in ipairs(box.groups or {}) do
+            local label = box.labelPool[index]
+
+            B.font(label, role)
+            B.paint(label, "SetTextColor", B.value("widgets.synthesis.group.color"))
+            label:SetText(group.label or "")
+            label:ClearAllPoints()
+            label:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -y)
+            label:SetWidth(width)
+
+            local lh = Tiles.lineHeight(label, role)
+
+            label:SetHeight(lh)
+            label:Show()
+            y = y + lh + gap
+
+            for position, tile in ipairs(group.tiles) do
+              local col = (position - 1) % cols
+              local row = math.floor((position - 1) / cols)
+
+              box.look.paint(box, tile, CELL, cellHeight)
+              tile.frame:ClearAllPoints()
+              tile.frame:SetPoint("TOPLEFT", box, "TOPLEFT", col * (CELL + gap), -(y + row * (cellHeight + gap)))
+              tile.frame:Show()
+            end
+
+            local rows = math.ceil(#group.tiles / cols)
+
+            y = y + rows * cellHeight + math.max(0, rows - 1) * gap
+
+            if index < #box.groups then
+              y = y + gap
+            end
+          end
+
+          box:SetHeight(math.max(1, y))
+          box.contentHeight = y
+
+          return y
+        end
+
+        return Tiles.build(parent, look)
+      end,
+    },
+
+    -- The status sheet as the character "Statistics" pane: a tinted band for each section title, then the rows
+    -- on alternating bands. The bands are textures (a child Frame would hide the texts); their layer is BACKGROUND.
+    output = {
+      stats = function(parent, B)
+        local T = EbonAPI.Output.tools
+        local PAD, TITLE_ALPHA, STRIPE_ALPHA = 8, 0.2, 0.35
+        local floor, max, min, ceil = math.floor, math.max, math.min, math.ceil
+
+        local function band(widget, key, alpha, level, y, width)
+          local tex = T.take(widget, "tex")
+
+          tex:SetTexture(B.media("solid"))
+          tex:SetDrawLayer("BACKGROUND")
+          B.paint(tex, "SetVertexColor", key)
+          tex:SetAlpha(alpha)
+          tex:SetWidth(width)
+          tex:SetHeight(1)
+          tex:ClearAllPoints()
+          tex:SetPoint("TOPLEFT", widget.scroll.child, "TOPLEFT", 0, -y)
+          tex.level = level
+
+          return tex
+        end
+
+        local look = { kinds = {} }
+
+        look.kinds.rows = function(widget, model, width)
+          widget.fiche = widget.fiche or { fs = {}, tex = {}, fr = {}, used = { fs = 0, tex = 0, fr = 0 } }
+          widget.sectionY = {}
+          widget.text:SetText("")
+          T.hideFiche(widget)
+
+          -- a pooled texture may come back as a marker after serving as a band: restore its defaults
+          for _, tex in ipairs(widget.fiche.tex) do
+            tex:SetAlpha(1)
+            tex:SetDrawLayer("ARTWORK")
+          end
+
+          local gap = B.value("widgets.output.row.gap")
+          local size = B.value("widgets.output.marker.size")
+          local inner = max(1, width - PAD * 2)
+          local labelW = min(B.value("widgets.output.label.width"), max(20, floor((inner - size - gap * 2) / 2)))
+          local labelX = PAD + size + gap
+          local valueX = labelX + labelW + gap
+          local valueW = max(1, width - PAD - valueX)
+          local y = 0
+
+          for index, section in ipairs(model.sections or {}) do
+            if index > 1 then
+              y = y + gap * 3
+            end
+
+            widget.sectionY[section.id] = y
+
+            local titleBand = band(widget, B.value("widgets.output.section.color"), TITLE_ALPHA, "band", y, width)
+            local _, h = T.words(widget, PAD, y + 3, inner, B.value("widgets.output.section.font"),
+              B.value("widgets.output.section.color"), section.name)
+
+            titleBand:SetHeight(h + 6)
+            y = y + h + 6 + gap
+
+            for number, row in ipairs(section.rows or {}) do
+              local stripe = number % 2 == 1 and band(widget, "borderDim", STRIPE_ALPHA, "stripe", y, width) or nil
+
+              T.marker(widget, row.level, PAD, y, size)
+
+              local _, lh = T.words(widget, labelX, y, labelW, "normal", B.value("widgets.output.label.color"), row.label)
+              local rh
+
+              if row.chips then
+                rh = T.chips(widget, row.chips, valueX, y, valueW)
+              else
+                local tagW = 0
+
+                if row.tag then
+                  local tag = T.take(widget, "fs")
+
+                  B.font(tag, B.value("kit.tag.font"))
+                  B.paint(tag, "SetTextColor", "caution")
+                  tag:SetWidth(0)
+                  tag:SetText(tostring(row.tag))
+                  tagW = min(ceil(tag:GetStringWidth() or 0), floor(valueW / 3))
+                  tag:SetWidth(tagW)
+                  tag:ClearAllPoints()
+                  tag:SetPoint("TOPLEFT", widget.scroll.child, "TOPLEFT", width - PAD - tagW, -y)
+                  tagW = tagW + gap
+                end
+
+                local _, vh = T.words(widget, valueX, y, max(1, valueW - tagW), "normal",
+                  B.value("widgets.output.value.color"), row.value)
+
+                rh = vh
+              end
+
+              local rowH = max(size, lh, rh or 0)
+
+              if stripe then
+                stripe:SetHeight(rowH + gap)
+              end
+
+              y = y + rowH + gap
+            end
+          end
+
+          return y
+        end
+
+        return EbonAPI.Output.build(parent, look)
       end,
     },
 

@@ -10,7 +10,7 @@ local L = EbonAPI.L
 
 local api = setmetatable({ addonName = "EbonAPI" }, { __index = Handle })
 
-local pairs, ipairs, type, tostring, tonumber = pairs, ipairs, type, tostring, tonumber
+local pairs, ipairs, type, tostring = pairs, ipairs, type, tostring
 local format, sub, gsub, match, date = string.format, string.sub, string.gsub, string.match, date
 local concat, sort = table.concat, table.sort
 

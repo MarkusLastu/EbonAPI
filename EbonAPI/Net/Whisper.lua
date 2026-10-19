@@ -52,7 +52,7 @@ local function now()
   return (GetTime and GetTime()) or 0
 end
 
-local streams = Assembler.new("EbonAPI:whispers", STREAM_TIMEOUT, STREAM_SWEEP, PART_MAX, Channel.expiry(drops))
+local streams = Assembler.new("EbonAPI:whispers", STREAM_TIMEOUT, STREAM_SWEEP, PART_MAX, Channel.expiry(drops), true)
 
 local function clean(text)
   return match(text, "^|c%x%x%x%x%x%x%x%x%[[^%]]*%]|r%s*(.*)$") or text
@@ -72,6 +72,8 @@ local function onAddonMessage(prefix, text, distribution, sender)
   if not sender then
     return
   end
+
+  Queue.heard(sender)
 
   text = clean(text)
 
@@ -275,7 +277,15 @@ function Whisper.offStream(prefix, op, fn)
   return true
 end
 
-function Whisper.stream(prefix, target, op, id, body, lane, single)
+local function room(prefix, op, id)
+  return Channel.LINE_MAX - len(prefix) - 1 - len(TAG .. ":" .. op .. ":" .. id .. ":") - 8
+end
+
+function Whisper.partCount(prefix, op, id, body)
+  return ceil(len(body) / room(prefix, op, id))
+end
+
+function Whisper.stream(prefix, target, op, id, body, lane, single, done)
   checkPrefix(prefix, "stream")
   checkOp(op, "stream")
 
@@ -293,7 +303,7 @@ function Whisper.stream(prefix, target, op, id, body, lane, single)
   end
 
   local head = TAG .. ":" .. op .. ":" .. id .. ":"
-  local budget = Channel.LINE_MAX - len(prefix) - 1 - len(head) - 8
+  local budget = room(prefix, op, id)
 
   if budget < 1 then
     error("EbonAPI.Whisper.stream: header too long for " .. prefix .. ":" .. op, 2)
@@ -303,7 +313,7 @@ function Whisper.stream(prefix, target, op, id, body, lane, single)
   local parts = {}
   local total = PART_MAX + 1
 
-  if ceil(length / budget) <= PART_MAX then
+  if Whisper.partCount(prefix, op, id, body) <= PART_MAX then
     local _, count = Lib.splitUtf8(body, budget, parts)
 
     total = count
@@ -324,7 +334,7 @@ function Whisper.stream(prefix, target, op, id, body, lane, single)
     parts[part] = head .. part .. "/" .. total .. ":" .. parts[part]
   end
 
-  return Channel.whisperAll(prefix, target, parts, total, lane, named and head or op, body, single)
+  return Channel.whisperAll(prefix, target, parts, total, lane, named and head or op, body, single, done)
 end
 
 function Whisper.streamCount()

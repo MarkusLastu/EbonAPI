@@ -18,8 +18,8 @@ local L = EbonAPI.L
 
 local type, pairs, ipairs, pcall, tostring, tonumber, setmetatable, error =
   type, pairs, ipairs, pcall, tostring, tonumber, setmetatable, error
-local floor, ceil, max, min, sin, cos, atan2, deg, rad =
-  math.floor, math.ceil, math.max, math.min, math.sin, math.cos, math.atan2, math.deg, math.rad
+local floor, ceil, max, min, sin, cos, atan2 =
+  math.floor, math.ceil, math.max, math.min, math.sin, math.cos, math.atan2
 local format, find, gsub, lower, concat, sort, sub =
   string.format, string.find, string.gsub, string.lower, table.concat, table.sort, string.sub
 
@@ -30,6 +30,7 @@ local WEAK = { __mode = "k" }
 local MODIFIERS = { LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true, LALT = true, RALT = true }
 
 local KINDS = {}
+local CHECKS = {}
 local elements = setmetatable({}, WEAK)
 local released = setmetatable({}, WEAK)
 local proxies = {}
@@ -376,7 +377,7 @@ function common:Refresh()
     self:SetDisabledState(evaluate(self, spec.disabled) and true or false)
   end
 
-  if spec.badge ~= nil then
+  if spec.badge ~= nil and not self.kitOwnBadge then
     setBadge(self, evaluate(self, spec.badge))
   end
 
@@ -675,10 +676,12 @@ end
 local SCROLLS = { NONE = true, VERTICAL = true, HORIZONTAL = true, BOTH = true }
 local SCROLLING = { group = true, panel = true, window = true }
 local CONTAINERS = { bar = true, grid = true, group = true, panel = true, window = true }
-local CLICKABLE = { button = true, secure = true, icon = true, slot = true, handle = true }
+local CLICKABLE = { button = true, secure = true, icon = true, slot = true, handle = true, card = true, cardHeader = true }
+local CARD_BADGES = { take = true, daily = true, active = true, dailyActive = true, ready = true }
 local MENUS = { list = true, tree = true, table = true }
 local NAMED = { secure = true, icon = true }
 local FRAMES = { flat = true, small = true, large = true }
+local ROW_SIZES = { small = true, medium = true, large = true }
 local ACTIONS = { "macro", "spell", "item" }
 local ATTRIBUTE = { macro = "macrotext", spell = "spell", item = "item" }
 
@@ -730,6 +733,25 @@ local function checkShape(owner, kind, spec, level)
     if (spec.min or 0) >= (spec.max or 1) then
       error(format("EbonAPI: %s: range expects min lower than max, got min %s and max %s", owner,
         tostring(spec.min or 0), tostring(spec.max or 1)), level)
+    end
+  end
+
+  if MENUS[kind] and spec.maxRows ~= nil then
+    checkNumber(owner, spec, "maxRows", level)
+
+    if spec.maxRows < 1 or spec.maxRows ~= floor(spec.maxRows) then
+      error(format("EbonAPI: %s: maxRows expects a whole number of at least 1, got %s", owner, tostring(spec.maxRows)),
+        level)
+    end
+  end
+
+  if (kind == "list" or kind == "tree") then
+    if spec.frame ~= nil and not (type(spec.frame) == "string" and FRAMES[lower(spec.frame)]) then
+      error(format("EbonAPI: %s: frame expects flat, small or large, got %s", owner, tostring(spec.frame)), level)
+    end
+
+    if spec.size ~= nil and not (type(spec.size) == "string" and ROW_SIZES[lower(spec.size)]) then
+      error(format("EbonAPI: %s: size expects small, medium or large, got %s", owner, tostring(spec.size)), level)
     end
   end
 
@@ -872,6 +894,19 @@ local function rowProblem(owner, item)
     end
   end
 
+  if item.prefix ~= nil and type(item.prefix) ~= "string" and type(item.prefix) ~= "number" then
+    return format("EbonAPI: %s: list item prefix expects a text or a number, got %s", owner, tostring(item.prefix))
+  end
+
+  if item.tag ~= nil and type(item.tag) ~= "string" and type(item.tag) ~= "number" then
+    return format("EbonAPI: %s: list item tag expects a text or a number, got %s", owner, tostring(item.tag))
+  end
+
+  if item.tagColor ~= nil and not THEME[item.tagColor] then
+    return format('EbonAPI: %s: list item tagColor "%s" is not a palette color (known: %s)', owner,
+      tostring(item.tagColor), concat(Palette.KEYS, ", "))
+  end
+
   local tint = item.suffixColor
 
   if tint ~= nil then
@@ -887,9 +922,28 @@ local function rowProblem(owner, item)
   return nil
 end
 
+local function isGameColor(color)
+  if type(color) ~= "table" then
+    return false
+  end
+
+  for _, channel in ipairs({ color.r or -1, color.g or -1, color.b or -1 }) do
+    if type(channel) ~= "number" or channel < 0 or channel > 1 then
+      return false
+    end
+  end
+
+  return true
+end
+
 local function colorProblem(owner, items)
   for _, item in ipairs(items) do
-    if item.color ~= nil and not THEME[item.color] then
+    if type(item.color) == "table" then
+      if not isGameColor(item.color) then
+        return format("EbonAPI: %s: list item color is not a palette color or an { r, g, b } color (r, g and b are "
+          .. "numbers from 0 to 1)", owner)
+      end
+    elseif item.color ~= nil and not THEME[item.color] then
       return format('EbonAPI: %s: list item color "%s" is not a palette color (known: %s)', owner, tostring(item.color),
         concat(Palette.KEYS, ", "))
     end
@@ -917,6 +971,15 @@ local function checkItems(owner, items, level)
 
   if problem then
     error(problem, level + 1)
+  end
+end
+
+local function checkBadge(owner, spec, level)
+  local badge = spec.badge
+
+  if badge ~= nil and type(badge) ~= "function" and not CARD_BADGES[badge] then
+    error(format("EbonAPI: %s: badge expects take, daily, active, dailyActive or ready, got %s", owner,
+      tostring(badge)), level + 1)
   end
 end
 
@@ -991,6 +1054,14 @@ local function validate(owner, kind, spec, level)
 
   if kind == "shortcut" then
     checkTarget(owner, spec, level)
+  end
+
+  if kind == "card" then
+    checkBadge(owner, spec, level)
+  end
+
+  if CHECKS[kind] then
+    CHECKS[kind](owner, spec, level)
   end
 
   checkScroll(owner, kind, spec, level)
@@ -1131,6 +1202,12 @@ function Kit.kinds()
   sort(list)
 
   return list
+end
+
+-- Registers an element kind that lives in its own file: its builder and, optionally, the check of its fields.
+function Kit.addKind(name, build, check)
+  KINDS[name] = build
+  CHECKS[name] = check
 end
 
 function Kit.setAction(button, action)
@@ -1535,11 +1612,7 @@ KINDS.band = function(owner, parent, spec)
     if show ~= self.on then
       self.on = show
 
-      if show then
-        self:Show()
-      else
-        self:Hide()
-      end
+      Lib.setShown(self, show)
 
       if self.onToggle then
         self.onToggle(show)
@@ -2049,7 +2122,7 @@ local function listCheck(frame, row, item, rowHeight)
   end
 
   if not check then
-    row.kitLabelPoints = anchorsOf(row.label)
+    row.kitLabelPoints = row.kitLabelPoints or anchorsOf(row.label)
     check = Bricks.create("toggle", row)
     check:SetLabel("")
     row.kitCheck = check
@@ -2072,6 +2145,164 @@ local function listCheck(frame, row, item, rowHeight)
 end
 
 local listRender
+
+local function affixPaint(region, row, item)
+  local color = item.color
+
+  if row.selectedState then
+    paint(region, "SetTextColor", "selectedText")
+  elseif row.disabledState then
+    paint(region, "SetTextColor", "muted")
+  elseif type(color) == "table" then
+    Palette.unpaint(region, "SetTextColor")
+    region:SetTextColor(color.r, color.g, color.b)
+  else
+    paint(region, "SetTextColor", color or "text")
+  end
+end
+
+local function affixRegion(row, name)
+  local region = row[name]
+
+  if not region then
+    region = row:CreateFontString(nil, "OVERLAY")
+    row[name] = region
+  end
+
+  Bricks.font(region, row.role or "button", row.outline or "")
+
+  return region
+end
+
+-- The prefix: a column at the left of the row label, as wide as the widest prefix of the list.
+local function listAffix(row, item, column)
+  local prefix = item.prefix
+  local check = row.kitCheck and row.kitCheck:IsShown() and row.kitCheck or nil
+
+  if prefix == nil then
+    if row.kitPrefix then
+      row.kitPrefix:Hide()
+    end
+
+    if row.kitAffixed then
+      row.kitAffixed = nil
+
+      if not check then
+        restoreAnchors(row.label, row.kitLabelPoints)
+      end
+    end
+
+    return
+  end
+
+  row.kitLabelPoints = row.kitLabelPoints or anchorsOf(row.label)
+  row.kitAffixed = true
+
+  local base = row.kitLabelPoints[1]
+  local region = affixRegion(row, "kitPrefix")
+
+  region:SetText(tostring(prefix))
+  region:SetWidth(column)
+  region:SetJustifyH("LEFT")
+  region:ClearAllPoints()
+
+  if check then
+    region:SetPoint("LEFT", check, "RIGHT", 0, 0)
+  else
+    region:SetPoint(base[1], base[2], base[3], base[4], base[5])
+  end
+
+  affixPaint(region, row, item)
+  region:Show()
+  row.label:ClearAllPoints()
+  row.label:SetPoint("LEFT", region, "RIGHT", S("kit.gap"), 0)
+  row.label:SetPoint("RIGHT", row, "RIGHT", -S("kit.inset"), 0)
+  row.label:SetJustifyH("LEFT")
+end
+
+-- The prefix column is measured in the font of the rows themselves, the one a skin gives its row brick.
+local function prefixColumn(frame, items, role, outline)
+  local column = 0
+  local measure = frame.kitMeasure
+
+  for _, item in ipairs(items) do
+    if item.prefix ~= nil then
+      if not measure then
+        measure = frame:CreateFontString(nil, "OVERLAY")
+        frame.kitMeasure = measure
+        measure:Hide()
+      end
+
+      Bricks.font(measure, role, outline)
+      measure:SetText(tostring(item.prefix))
+      column = max(column, ceil(measure:GetStringWidth() or 0))
+    end
+  end
+
+  return column
+end
+
+-- A list with maxRows takes the height of its rows, up to that many.
+local function listFit(frame, items, rowHeight)
+  local rows = min(#items, frame.spec.maxRows)
+
+  if rows == 0 and (frame.spec.empty or frame.spec.emptyKey) then
+    rows = 1
+  end
+
+  local height = rows * rowHeight + frame.kitPad * 2
+
+  if max(frame:GetHeight() - height, height - frame:GetHeight()) < 0.5 then
+    return
+  end
+
+  frame.kitSizing = true
+  frame:SetHeight(height)
+  frame.kitSizing = false
+
+  if frame.kitHost then
+    relayout(frame.kitHost, true)
+  end
+end
+
+-- The tag: a small pill in the skin's small frame, coloured from the palette. It sits at the right of the
+-- row's actions; returns the room it takes.
+local function listTag(row, item, right)
+  local tag = row.kitTag
+
+  if item.tag == nil then
+    if tag then
+      tag:Hide()
+    end
+
+    return 0
+  end
+
+  local color = item.tagColor or S("kit.tag.color")
+
+  if not tag then
+    tag = CreateFrame("Frame", nil, row)
+    Bricks.frame(tag, "small", color, color)
+    tag.text = Bricks.text(tag, S("kit.tag.font"), S("kit.tag.text"))
+    tag.text:SetPoint("CENTER", tag, "CENTER", 0, 0)
+    row.kitTag = tag
+  end
+
+  paint(tag, "SetBackdropColor", color)
+  paint(tag, "SetBackdropBorderColor", color)
+  tag.text:SetText(tostring(item.tag))
+
+  local padding = S("kit.tag.padding")
+  local width = ceil(tag.text:GetStringWidth() or 0) + padding * 2
+
+  tag:SetWidth(width)
+  tag:SetHeight(ceil(tag.text:GetStringHeight() or 0) + padding)
+  tag:ClearAllPoints()
+  tag:SetPoint("RIGHT", row, "RIGHT", -right, 0)
+  tag:Show()
+
+  return width + S("kit.gap")
+end
 
 local function listFree(row)
   if row.kitRoom then
@@ -2176,6 +2407,8 @@ local function listTail(frame, row, item, rowHeight, rowWidth)
     row.kitActions[index]:Hide()
   end
 
+  used = used + listTag(row, item, used)
+
   if item.suffix ~= nil and item.suffix ~= "" then
     local suffix = row.kitSuffix
 
@@ -2249,17 +2482,33 @@ local function listTail(frame, row, item, rowHeight, rowWidth)
 end
 
 function listRender(frame)
+  if frame.kitSizing then
+    return
+  end
+
   local owner, spec = frame.owner, frame.spec
   local rows = frame.rowsPool
-  local rowHeight = spec.rowHeight or S("kit.row")
+  local size = frame.kitSize
+  local rowHeight = spec.rowHeight or (size and S("kit.rows." .. size .. ".height")) or S("kit.row")
   local indent, inset = S("kit.indent"), S("kit.inset")
-  local width = frame:GetWidth() - S("widgets.scroll.width") - S("kit.gap")
+  local pad = frame.kitPad
+  local width = frame:GetWidth() - pad * 2 - S("widgets.scroll.width") - S("kit.gap")
   local child = frame.scroll.child
   local items = frame.visible or frame.items
   local y = 0
 
+  if spec.maxRows then
+    listFit(frame, items, rowHeight)
+  end
+
   rows:releaseAll()
-  frame.scroll:SetView(width, frame:GetHeight())
+
+  local sample = rows:acquire(child)
+  local role = size and S("kit.rows." .. size .. ".font") or sample.role or "button"
+  local column = prefixColumn(frame, items, role, sample.outline or "")
+
+  rows:releaseAll()
+  frame.scroll:SetView(width, frame:GetHeight() - pad * 2)
 
   for _, item in ipairs(items) do
     local row = rows:acquire(child)
@@ -2270,6 +2519,12 @@ function listRender(frame)
       payload = ask(frame, spec.drag, item)
     end
 
+    -- A sized list gives its rows the skin's font for that size; the row brick applies it at each visual.
+    if size and row.role ~= role then
+      row.role, row.outline = role, nil
+      row:Visual()
+    end
+
     row:SetWidth(max(1, width - depth * indent))
     row:SetHeight(rowHeight)
     row:SetPoint("TOPLEFT", child, "TOPLEFT", depth * indent, -y)
@@ -2277,7 +2532,22 @@ function listRender(frame)
     row:SetSelected(frame.selected == item)
     row:SetDisabledState(item.disabled and true or false)
 
-    row:SetTextKey(item.color)
+    if not row.kitVisual then
+      row.kitVisual = row.Visual
+      row.Visual = function(self)
+        local game = self.kitGame
+
+        self.kitVisual(self)
+
+        if game and not self.selectedState and not self.disabledState then
+          Palette.unpaint(self.label, "SetTextColor")
+          self.label:SetTextColor(game.r, game.g, game.b)
+        end
+      end
+    end
+
+    row.kitGame = type(item.color) == "table" and item.color or nil
+    row:SetTextKey(type(item.color) == "string" and item.color or nil)
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     row.kitItem = item
     row.kitOwner = owner
@@ -2315,6 +2585,7 @@ function listRender(frame)
 
     listFree(row)
     listCheck(frame, row, item, rowHeight)
+    listAffix(row, item, column)
     listTail(frame, row, item, rowHeight, width - depth * indent)
 
     if payload then
@@ -2348,8 +2619,22 @@ local function newList(owner, parent, spec, tree)
 
   frame:SetWidth(spec.width or S("page.unit") * 2)
   frame:SetHeight(spec.height or S("kit.list"))
+  frame.kitPad = 0
+
+  -- A framed list sits on the skin's collection background, its rows inside the frame's margin.
+  if spec.frame then
+    Bricks.frame(frame, lower(spec.frame), S("kit.collection.color"), S("kit.collection.border"))
+    frame.kitFramed = true
+    frame.kitPad = S("kit.collection.padding")
+  end
+
+  if spec.size and lower(spec.size) ~= "small" then
+    frame.kitSize = lower(spec.size)
+  end
+
   frame.scroll = Bricks.create("scroll", frame)
-  frame.scroll:SetAllPoints(frame)
+  frame.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", frame.kitPad, -frame.kitPad)
+  frame.scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -frame.kitPad, frame.kitPad)
   frame.rowsPool = Bricks.slotPool("row")
   frame.items = {}
   frame.nodes = {}
@@ -3244,6 +3529,373 @@ KINDS.slot = function(owner, parent, spec)
   return slot
 end
 
+-- The check box on the right of a card or a card header. It hands the mouse back to the card, whose
+-- hover would otherwise go out while the mouse is on the box.
+local function cardBox(element, onToggle)
+  local box = Bricks.create("toggle", element)
+
+  box:SetLabel("")
+  box.kitSize = { box:TextWidth(), box:GetHeight() }
+  box.kitSquare = box.box and { box.box:GetWidth(), box.box:GetHeight() }
+  box:SetWidth(box.kitSize[1])
+  box:ClearAllPoints()
+  box:SetPoint("RIGHT", element, "RIGHT", -6, 0)
+  box.onToggle = onToggle
+  box:HookScript("OnEnter", function()
+    local enter = element:GetScript("OnEnter")
+
+    if enter then
+      enter(element)
+    end
+  end)
+  box:HookScript("OnLeave", function()
+    local leave = element:GetScript("OnLeave")
+
+    if leave then
+      leave(element)
+    end
+  end)
+  element.kitBox = box
+
+  return box
+end
+
+-- The box no taller than the card or the header it sits on, read at each refresh: the skin's square can be
+-- taller than a group header (26 pixels in Azeroth, widgets.toggle.size, for board.header.height = 20). The
+-- square keeps its proportions; the box's width follows it.
+local function fitBox(element)
+  local box = element.kitBox
+  local room = element:GetHeight()
+
+  if not box or room <= 0 then
+    return
+  end
+
+  local width, height = box.kitSize[1], box.kitSize[2]
+  local square = box.kitSquare
+
+  if square and box.box then
+    local side, tall = square[1], square[2]
+
+    if tall > room then
+      side, tall = side * room / tall, room
+    end
+
+    box.box:SetWidth(side)
+    box.box:SetHeight(tall)
+    width = width - square[1] + side
+  end
+
+  box:SetWidth(width)
+  box:SetHeight(height > room and room or height)
+end
+
+local function cardTip(element)
+  local spec = element.spec
+
+  if spec.link ~= nil then
+    showTip(element)
+    return
+  end
+
+  if spec.tip == nil and spec.tipKey == nil then
+    return
+  end
+
+  local body = spec.tipKey and localized(element.owner, spec.tipKey) or spec.tip
+
+  Bricks.tip(element, element.title:GetText() or "", type(body) == "string" and body or nil)
+
+  if type(spec.tip) == "function" then
+    local ok, err = pcall(spec.tip, lines, element)
+
+    if not ok then
+      report(err, element.owner)
+    end
+
+    GameTooltip:Show()
+  end
+end
+
+-- A card or a card header dragged with the left button carries the value of its `drag` field; Kit.endDrag
+-- hands it to the element of the same addon under the cursor that has an `onDrop` field. A disabled one
+-- cannot be dragged.
+local function draggable(element, owner)
+  element:RegisterForDrag("LeftButton")
+  element:SetScript("OnDragStart", function(self)
+    local payload = not self.disabledState and evaluate(self, self.spec.drag)
+
+    if payload then
+      self.kitDragged = true
+      Kit.beginDrag(owner, payload, self)
+    end
+  end)
+  element:SetScript("OnDragStop", function()
+    Kit.endDrag()
+  end)
+end
+
+-- A card, drawn by the skin's card brick: an icon, round or square, with a state badge, a title, a line under
+-- it and an optional check box on the right.
+KINDS.card = function(owner, parent, spec)
+  local card = CreateFrame("Button", nil, parent)
+
+  card:SetWidth(spec.width or S("page.unit") * 2)
+  card:SetHeight(spec.height or S("board.row.height"))
+  card:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  card.icon = card:CreateTexture(nil, "BORDER")
+  card.title = card:CreateFontString(nil, "OVERLAY")
+  card.sub = card:CreateFontString(nil, "OVERLAY")
+
+  for _, text in ipairs({ card.title, card.sub }) do
+    text:SetJustifyH("LEFT")
+
+    if text.SetWordWrap then
+      text:SetWordWrap(false)
+    end
+  end
+
+  card.kitOwnTip, card.kitOwnBadge = true, true
+  card.look = Bricks.create("card", card)
+
+  local function draw(self)
+    self.look:SetState(self.hovered and not self.disabledState, self.selectedState)
+  end
+
+  card:SetScript("OnEnter", function(self)
+    self.hovered = true
+    draw(self)
+    cardTip(self)
+  end)
+  card:SetScript("OnLeave", function(self)
+    self.hovered = false
+    draw(self)
+    Bricks.hideTip()
+  end)
+  card:SetScript("OnClick", function(self, mouse)
+    click(self, mouse)
+  end)
+  draggable(card, owner)
+
+  function card:SetSelected(selected)
+    self.selectedState = selected and true or false
+    draw(self)
+
+    return self
+  end
+
+  function card:SetChecked(checked)
+    if self.kitBox then
+      self.kitBox:SetValue(checked and true or false)
+    end
+
+    return self
+  end
+
+  function card:SetDisabledState(disabled)
+    self.disabledState = disabled and true or false
+    self.icon:SetDesaturated(self.disabledState)
+    self:SetAlpha(self.disabledState and S("widgets.disabledAlpha") or 1)
+
+    if self.kitBox then
+      self.kitBox:SetDisabledState(self.disabledState)
+    end
+
+    draw(self)
+  end
+
+  function card:kitRefresh()
+    local fields = self.spec
+    local icon = Lib.icon(evaluate(self, fields.icon)) or Bricks.media("addonIcon")
+    local round = evaluate(self, fields.round) and true or false
+    local badge = evaluate(self, fields.badge)
+    local title, sub = evaluate(self, fields.title), evaluate(self, fields.sub)
+
+    if icon ~= self.kitIcon or round ~= self.kitRound then
+      self.kitIcon, self.kitRound = icon, round
+
+      if round then
+        self.icon:SetTexCoord(0, 1, 0, 1)
+        SetPortraitToTexture(self.icon, icon)
+      else
+        self.icon:SetTexture(icon)
+        trim(self.icon)
+      end
+
+      self.look:SetRound(round)
+    end
+
+    self.look:SetBadge(CARD_BADGES[badge] and badge or nil)
+    self.title:SetText(title ~= nil and tostring(title) or (textOf(self) or ""))
+    self.sub:SetText(sub ~= nil and tostring(sub) or "")
+
+    if fields.checked ~= nil and not self.kitBox then
+      cardBox(self, function(value)
+        callback(self, "onCheck", value)
+      end)
+    end
+
+    if self.kitBox then
+      fitBox(self)
+      self.look:SetInset(self.kitBox:GetWidth() + 12)
+    end
+
+    if self.kitBox and reads(self, "checked") then
+      self.kitBox:SetValue(evaluate(self, fields.checked) and true or false)
+    end
+
+    if reads(self, "selected") then
+      self.selectedState = evaluate(self, fields.selected) and true or false
+    end
+
+    self.kitDone = true
+    draw(self)
+  end
+
+  return card
+end
+
+-- A group header of a list of cards, drawn by the skin's cardHeader brick: a text and a line, with an
+-- optional check box on the right and an optional count on its left, the line stopping 4 pixels before them.
+local HEADER_INSET = 4
+
+local function headerChevron(header, open)
+  local chevron = header.kitChevron
+  local left = HEADER_INSET
+
+  if open ~= nil then
+    local size = S("nav.tree.chevron")
+
+    if not chevron then
+      chevron = header:CreateTexture(nil, "OVERLAY")
+      chevron:SetTexture(Bricks.media("chevron"))
+      header.kitChevron = chevron
+    end
+
+    chevron:SetWidth(size)
+    chevron:SetHeight(size)
+    chevron:ClearAllPoints()
+    chevron:SetPoint("RIGHT", header.text, "LEFT", -S("kit.gap"), 0)
+    paint(chevron, "SetVertexColor", S("board.header.color"))
+    Bricks.turn(chevron, open and true or false)
+    chevron:Show()
+    left = HEADER_INSET + size + S("kit.gap")
+  elseif chevron then
+    chevron:Hide()
+  end
+
+  if header.kitLeft ~= left then
+    header.kitLeft = left
+    header.text:ClearAllPoints()
+    header.text:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", left, 3)
+  end
+end
+
+KINDS.cardHeader = function(owner, parent, spec)
+  local header = CreateFrame("Button", nil, parent)
+
+  header:SetWidth(spec.width or S("page.unit") * 2)
+  header:SetHeight(spec.height or S("board.header.height"))
+  header:EnableMouse(false)
+  header.text = header:CreateFontString(nil, "OVERLAY")
+  header.text:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", HEADER_INSET, 3)
+  header.kitLeft = HEADER_INSET
+  header.look = Bricks.create("cardHeader", header)
+
+  if spec.drag ~= nil or spec.onDrop ~= nil then
+    header:EnableMouse(true)
+    draggable(header, owner)
+  end
+
+  if spec.onClick ~= nil or spec.menu ~= nil then
+    header:EnableMouse(true)
+    header:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    header:SetScript("OnMouseDown", function(self)
+      self.kitDragged = false
+    end)
+    header:SetScript("OnClick", function(self, mouse)
+      if self.kitDragged then
+        self.kitDragged = false
+        return
+      end
+
+      click(self, mouse)
+    end)
+  end
+
+  function header:SetChecked(checked)
+    if self.kitBox then
+      self.kitBox:SetValue(checked and true or false)
+    end
+
+    return self
+  end
+
+  function header:SetDisabledState(disabled)
+    self.disabledState = disabled and true or false
+
+    if self.kitBox then
+      self.kitBox:SetDisabledState(self.disabledState)
+    end
+  end
+
+  function header:kitRefresh()
+    local fields = self.spec
+
+    local open = nil
+
+    if fields.open ~= nil then
+      open = evaluate(self, fields.open) and true or false
+    end
+
+    self.text:SetText(textOf(self) or "")
+    headerChevron(self, open)
+
+    if fields.checked ~= nil and not self.kitBox then
+      cardBox(self, function(value)
+        callback(self, "onCheck", value)
+      end)
+      self.kitBox:SetPoint("RIGHT", self, "RIGHT", -4, 0)
+    end
+
+    if self.kitBox and reads(self, "checked") then
+      self.kitBox:SetValue(evaluate(self, fields.checked) and true or false)
+    end
+
+    local count = evaluate(self, fields.count)
+    local inset = 4
+
+    count = count ~= nil and tostring(count) or ""
+
+    if count ~= "" and not self.kitCount then
+      self.kitCount = Bricks.text(self, "small", "muted")
+    end
+
+    if self.kitBox then
+      fitBox(self)
+      inset = self.kitBox:GetWidth() + 8
+    end
+
+    if self.kitCount then
+      self.kitCount:ClearAllPoints()
+      self.kitCount:SetPoint("RIGHT", self, "RIGHT", -inset, 0)
+      self.kitCount:SetText(count)
+
+      if count == "" then
+        self.kitCount:Hide()
+      else
+        self.kitCount:Show()
+        inset = inset + ceil(self.kitCount:GetStringWidth() or 0) + 4
+      end
+    end
+
+    self.look:SetInset(inset)
+    self.kitDone = true
+  end
+
+  return header
+end
+
 KINDS.handle = function(owner, parent, spec)
   local size = spec.size or S("kit.handle")
   local handle = CreateFrame("Button", nil, parent)
@@ -3542,11 +4194,7 @@ local function settle(window, shown)
 
     window.kitSettling, window.kitWant, window.kitCombatShown = nil, nil, nil
 
-    if want then
-      window:Show()
-    else
-      window:Hide()
-    end
+    Lib.setShown(window, want)
   end)
 end
 
@@ -3808,11 +4456,7 @@ function Kit.window(owner, id, spec)
   function frame:SetShaded(state)
     self.kitShaded = state and self.head ~= nil or false
 
-    if self.kitShaded then
-      self.kitArea:Hide()
-    else
-      self.kitArea:Show()
-    end
+    Lib.setShown(self.kitArea, not self.kitShaded)
 
     if self.band then
       self.band:Refresh()
@@ -4051,9 +4695,15 @@ end
 
 function Kit.beginDrag(owner, payload, source)
   local frame = ensureGhost()
+  local text = source and textOf(source)
+
+  -- a card shows its title, which may come from a function rather than from `text` or `key`
+  if (text == nil or text == "") and source and source.title and source.title.GetText then
+    text = source.title:GetText()
+  end
 
   dragging = { owner = owner, payload = payload, source = source }
-  frame.text:SetText(source and (textOf(source) or "") or "")
+  frame.text:SetText(text or "")
   frame:Show()
 
   return true
@@ -4203,6 +4853,42 @@ function Kit.setShortcut(owner, id, key)
   return true
 end
 
+local function shiftDialog(height)
+  local current = dialog and dialog.options and not dialog.placing and dialog.contentHeight
+
+  if not current or current == height then
+    return
+  end
+
+  local spacing = dialog.kitSpacing or S("kit.spacing")
+  local delta = (height > 0 and height + spacing or 0) - (current > 0 and current + spacing or 0)
+
+  dialog.contentHeight = height
+
+  for _, region in ipairs({ dialog.choices, dialog.input, dialog.copyField, dialog.hint, dialog.accept, dialog.cancel }) do
+    if region:IsShown() then
+      local points = {}
+
+      for index = 1, region:GetNumPoints() do
+        points[index] = { region:GetPoint(index) }
+      end
+
+      region:ClearAllPoints()
+
+      for _, point in ipairs(points) do
+        -- A point relative to another button of the dialog follows that button.
+        if point[2] == dialog.accept then
+          region:SetPoint(point[1], point[2], point[3], point[4], point[5])
+        else
+          region:SetPoint(point[1], point[2], point[3], point[4], (point[5] or 0) - delta)
+        end
+      end
+    end
+  end
+
+  dialog:Resize(dialog:GetWidth(), dialog:GetHeight() + delta)
+end
+
 local function buildDialog()
   local frame = Bricks.Container("EbonAPIKitDialog")
   local copyField = CreateFrame("Frame", nil, frame)
@@ -4246,6 +4932,41 @@ local function buildDialog()
   frame.copyArea = Bricks.editArea(copyField, copy)
   frame.copyArea:SetMultiLine(true)
   frame.hint = Bricks.text(frame, "small", "muted")
+  frame.content = makeContainer(CreateFrame("Frame", nil, frame), {}, "VERTICAL", 0)
+  frame.content.owner, frame.content.spec = "EbonAPI", {}
+
+  -- An element without width takes the width it is placed in; a container placed in the content passes
+  -- the width inside its margins on to its own elements, so a framed group of texts wraps inside its frame.
+  local function fillAdd(self, kind, spec)
+    if spec == nil or (type(spec) == "table" and spec.width == nil) then
+      local copy = {}
+
+      for key, value in pairs(spec or {}) do
+        copy[key] = value
+      end
+
+      copy.width = self.kitInner
+      spec = copy
+    end
+
+    -- container:Add itself, called here directly so that a wrong field points at the caller's line.
+    local element = Kit.create(self.owner, kind, self, spec)
+
+    if element and element ~= self and element.Add == container.Add and type(spec) == "table" and spec.width then
+      element.kitInner = max(1, spec.width - padOf(spec) * 2)
+      element.Add = fillAdd
+    end
+
+    return element
+  end
+
+  frame.content.Add = fillAdd
+
+  function frame.content:kitResize(_, height)
+    self:SetHeight(height)
+    shiftDialog(height)
+  end
+
   frame.accept = Bricks.create("button", frame)
   frame.cancel = Bricks.create("button", frame)
   frame.accept.onClick = function()
@@ -4270,34 +4991,113 @@ function Kit.openDialog(options)
     Kit.closeDialog(false)
   end
 
+  if options.content ~= nil and type(options.content) ~= "function" then
+    error(format("EbonAPI: %s: api:Dialog content expects a function, got %s", options.owner or "EbonAPI",
+      type(options.content)), 2)
+  end
+
+  -- A dialog with content takes the rich presentation of the skin: wider, margins and gaps of its own,
+  -- title and text aligned and coloured by the skin, buttons on the right.
+  local rich = options.content ~= nil
   local pad, spacing = S("kit.padding"), S("kit.spacing")
   local width = S("kit.dialog.width")
+
+  if rich then
+    pad, spacing, width = S("kit.dialog.rich.padding"), S("kit.dialog.rich.spacing"), S("kit.dialog.wide")
+  end
+
   local inner = width - pad * 2
   local buttonHeight = S("widgets.button.height")
   local y = pad
 
+  dialog.kitSpacing = spacing
+
+  local titleKey, textKey = "kit.dialog.title", rich and "kit.dialog.rich.text" or nil
+  local anchor = rich and "TOPLEFT" or "TOP"
+  local anchorX = rich and pad or 0
+
+  if rich then
+    titleKey = "kit.dialog.rich.title"
+  end
+
+  -- The tone is optional for a skin's brick: B.baseButton gives it, a brick that makes its button itself may not.
+  if dialog.accept.SetTone then
+    if options.danger then
+      dialog.accept:SetTone(S("kit.dialog.danger.color"), S("kit.dialog.danger.border"))
+    else
+      dialog.accept:SetTone(nil, nil)
+    end
+  end
+
   dialog.options = options
   dialog.choice, dialog.chosen = options.value, nil
+  dialog.placing = true
+  dialog.content.owner = options.owner or "EbonAPI"
+  dialog.content.kitInner = inner
+  dialog.content:Clear()
 
   if options.title and options.title ~= "" then
-    Bricks.font(dialog.title, S("kit.dialog.title.font"))
-    paint(dialog.title, "SetTextColor", S("kit.dialog.title.color"))
-    dialog.title:SetJustifyH(S("kit.dialog.title.align"))
+    Bricks.font(dialog.title, S(titleKey .. ".font"))
+    paint(dialog.title, "SetTextColor", S(titleKey .. ".color"))
+    dialog.title:SetJustifyH(S(titleKey .. ".align"))
     dialog.title:SetWidth(inner)
     dialog.title:SetText(options.title)
     dialog.title:ClearAllPoints()
-    dialog.title:SetPoint("TOP", dialog, "TOP", 0, -y)
+    dialog.title:SetPoint(anchor, dialog, anchor, anchorX, -y)
     dialog.title:Show()
     y = y + (dialog.title:GetStringHeight() or 0) + spacing
   else
     dialog.title:Hide()
   end
 
+  if textKey then
+    Bricks.font(dialog.text, S(textKey .. ".font"))
+    paint(dialog.text, "SetTextColor", S(textKey .. ".color"))
+    dialog.text:SetJustifyH(S(textKey .. ".align"))
+  else
+    Bricks.font(dialog.text, "normal")
+    paint(dialog.text, "SetTextColor", "text")
+    dialog.text:SetJustifyH("CENTER")
+  end
+
   dialog.text:SetWidth(inner)
   dialog.text:SetText(options.text or "")
   dialog.text:ClearAllPoints()
-  dialog.text:SetPoint("TOP", dialog, "TOP", 0, -y)
-  y = y + (dialog.text:GetStringHeight() or 0) + spacing
+  dialog.text:SetPoint(anchor, dialog, anchor, anchorX, -y)
+
+  if rich and (options.text or "") == "" then
+    dialog.text:Hide()
+  else
+    dialog.text:Show()
+    y = y + (dialog.text:GetStringHeight() or 0) + spacing
+  end
+
+  dialog.contentHeight = 0
+
+  if options.content then
+    local box = dialog.content
+
+    box:SetWidth(inner)
+    box:ClearAllPoints()
+    box:SetPoint("TOPLEFT", dialog, "TOPLEFT", pad, -y)
+    box:Show()
+
+    local ok, err = pcall(options.content, box)
+
+    if not ok then
+      report(err, box.owner, "dialog", "content")
+    end
+
+    box:Layout()
+    dialog.contentHeight = box.kitContentHeight or 0
+    box:SetHeight(dialog.contentHeight)
+
+    if dialog.contentHeight > 0 then
+      y = y + dialog.contentHeight + spacing
+    end
+  else
+    dialog.content:Hide()
+  end
 
   dialog.rows:releaseAll()
 
@@ -4401,15 +5201,27 @@ function Kit.openDialog(options)
   if options.cancel then
     dialog.cancel:SetLabel(options.cancel)
     dialog.cancel:Fit(max(S("kit.dialog.button"), dialog.cancel:TextWidth()))
-    dialog.accept:SetPoint("TOPRIGHT", dialog, "TOP", -floor(spacing / 2), -y)
-    dialog.cancel:SetPoint("TOPLEFT", dialog, "TOP", floor(spacing / 2), -y)
+    if rich then
+      dialog.accept:SetPoint("TOPRIGHT", dialog, "TOPRIGHT", -pad, -y)
+      dialog.cancel:SetPoint("TOPRIGHT", dialog.accept, "TOPLEFT", -spacing, 0)
+    else
+      dialog.accept:SetPoint("TOPRIGHT", dialog, "TOP", -floor(spacing / 2), -y)
+      dialog.cancel:SetPoint("TOPLEFT", dialog, "TOP", floor(spacing / 2), -y)
+    end
+
     dialog.cancel:Show()
   else
-    dialog.accept:SetPoint("TOP", dialog, "TOP", 0, -y)
+    if rich then
+      dialog.accept:SetPoint("TOPRIGHT", dialog, "TOPRIGHT", -pad, -y)
+    else
+      dialog.accept:SetPoint("TOP", dialog, "TOP", 0, -y)
+    end
+
     dialog.cancel:Hide()
   end
 
   y = y + buttonHeight + pad
+  dialog.placing = false
   dialog:Resize(width, y)
   dialog:Show()
 
@@ -4716,13 +5528,20 @@ function Handle:Dialog(spec)
     end
   end
 
+  if spec.content ~= nil and type(spec.content) ~= "function" then
+    error(format("EbonAPI: %s: api:Dialog content expects a function, got %s", owner, type(spec.content)), 2)
+  end
+
   return Kit.openDialog({
+    owner = owner,
+    content = spec.content,
     title = text(spec.title, spec.titleKey),
     text = text(spec.text, spec.textKey),
     accept = text(spec.accept, spec.acceptKey),
     cancel = text(spec.cancel, spec.cancelKey),
     input = spec.input,
     maxLetters = spec.maxLetters,
+    danger = spec.danger and true or nil,
     choices = choices,
     value = spec.value,
     onAccept = spec.onAccept,

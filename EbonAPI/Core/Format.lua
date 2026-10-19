@@ -6,7 +6,7 @@ local Lib = EbonAPI.Lib
 local Log = EbonAPI.Log
 local L = EbonAPI.L
 
-local tonumber, tostring = tonumber, tostring
+local tostring = tostring
 local floor, ceil, abs, max = math.floor, math.ceil, math.abs, math.max
 local format, len, sub = string.format, string.len, string.sub
 local concat, insert = table.concat, table.insert

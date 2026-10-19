@@ -167,20 +167,28 @@ onUpdate = function(_, elapsed)
       local left = ticker.left - elapsed
 
       if left <= 0 then
-        local every = ticker.every
+        local owner = ticker.owner
+        local ok, err
 
-        left = left + every
+        if ticker.once then
+          ticker.dead = true
+          dirty = true
+          ok, err = pcall(ticker.fn)
+        else
+          local every = ticker.every
 
-        if left <= 0 then
-          left = every
+          left = left + every
+
+          if left <= 0 then
+            left = every
+          end
+
+          ticker.left = left
+          ok, err = pcall(ticker.fn, every)
         end
 
-        ticker.left = left
-
-        local ok, err = pcall(ticker.fn, every)
-
         if not ok then
-          report(err, ticker.owner)
+          report(err, owner)
         end
       else
         ticker.left = left
@@ -209,24 +217,22 @@ local function checkTicker(who, id, every, fn)
   end
 end
 
-function Bus.tick(id, every, fn, owner)
-  checkTicker("EbonAPI.Bus.tick", id, every, fn)
-
+local function schedule(id, every, fn, owner, once)
   for index = 1, tickerCount do
     local ticker = tickers[index]
 
     if ticker.id == id then
-      if ticker.every ~= every then
+      if once or ticker.dead or ticker.every ~= every then
         ticker.left = every
       end
 
       ticker.every = every
       ticker.fn = fn
       ticker.owner = owner
+      ticker.once = once
 
       if ticker.dead then
         ticker.dead = nil
-        ticker.left = every
         refreshTicker()
       end
 
@@ -235,11 +241,23 @@ function Bus.tick(id, every, fn, owner)
   end
 
   tickerCount = tickerCount + 1
-  tickers[tickerCount] = { id = id, every = every, left = every, fn = fn, owner = owner }
+  tickers[tickerCount] = { id = id, every = every, left = every, fn = fn, owner = owner, once = once }
 
   refreshTicker()
 
   return true
+end
+
+function Bus.tick(id, every, fn, owner)
+  checkTicker("EbonAPI.Bus.tick", id, every, fn)
+
+  return schedule(id, every, fn, owner, nil)
+end
+
+function Bus.after(id, delay, fn, owner)
+  checkTicker("EbonAPI.Bus.after", id, delay, fn)
+
+  return schedule(id, delay, fn, owner, true)
 end
 
 function Bus.untick(id)
@@ -313,23 +331,26 @@ function Handle:OffEvent(event, fn)
   return Bus.off(event, fn, self)
 end
 
+local function own(handle, scoped)
+  local owned = handle._busTickers
+
+  if not owned then
+    owned = {}
+    handle._busTickers = owned
+  end
+
+  if not Lib.indexOf(owned, scoped) then
+    owned[#owned + 1] = scoped
+  end
+end
+
 function Handle:Tick(id, every, fn)
   checkTicker("EbonAPI:Tick", id, every, fn)
 
   local scoped = self.addonName .. ":" .. id
 
   Bus.tick(scoped, every, fn, self.addonName)
-
-  local owned = self._busTickers
-
-  if not owned then
-    owned = {}
-    self._busTickers = owned
-  end
-
-  if not Lib.indexOf(owned, scoped) then
-    owned[#owned + 1] = scoped
-  end
+  own(self, scoped)
 
   return true
 end
@@ -340,6 +361,31 @@ function Handle:Untick(id)
   end
 
   local scoped = self.addonName .. ":" .. id
+
+  if self._busTickers then
+    Lib.removeValue(self._busTickers, scoped)
+  end
+
+  return Bus.untick(scoped)
+end
+
+function Handle:After(id, delay, fn)
+  checkTicker("EbonAPI:After", id, delay, fn)
+
+  local scoped = self.addonName .. "/" .. id
+
+  Bus.after(scoped, delay, fn, self.addonName)
+  own(self, scoped)
+
+  return true
+end
+
+function Handle:CancelAfter(id)
+  if type(id) ~= "string" then
+    error("EbonAPI:CancelAfter expects a timer id, got " .. type(id), 2)
+  end
+
+  local scoped = self.addonName .. "/" .. id
 
   if self._busTickers then
     Lib.removeValue(self._busTickers, scoped)

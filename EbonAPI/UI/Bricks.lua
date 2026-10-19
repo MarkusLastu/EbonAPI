@@ -41,6 +41,8 @@ local CONTRACT = {
     "SetHorizontalOffset", "Wheel",
   },
   minimap = {},
+  card = { "Dress", "Undress", "SetState", "SetBadge", "SetRound", "SetInset" },
+  cardHeader = { "Dress", "Undress", "SetInset" },
 }
 
 local FIELDS = {
@@ -421,6 +423,10 @@ function Bricks.apply()
 
   Palette.repaint()
 
+  if EbonAPI.AddonList then
+    EbonAPI.AddonList.refresh()
+  end
+
   for button in pairs(buttons) do
     button:Visual()
   end
@@ -623,6 +629,8 @@ local function fillVisual(button)
     border, text = "buttonDisabledBorder", "buttonDisabledText"
   elseif button.hovered then
     bg, border = "buttonHoverFill", "buttonHover"
+  elseif button.toneBg then
+    bg, border = button.toneBg, button.toneBorder or button.toneBg
   end
 
   paint(button, "SetBackdropColor", bg)
@@ -650,11 +658,7 @@ local function lineVisual(button)
   labelFont(button, text)
 
   if button.bar then
-    if button.selectedState then
-      button.bar:Show()
-    else
-      button.bar:Hide()
-    end
+    Lib.setShown(button.bar, button.selectedState)
   end
 
   if button.arrow then
@@ -699,11 +703,7 @@ local function flatVisual(button)
   end
 
   if button.hover then
-    if button.hovered and not button.disabledState then
-      button.hover:Show()
-    else
-      button.hover:Hide()
-    end
+    Lib.setShown(button.hover, button.hovered and not button.disabledState)
   end
 
   paint(button.label, "SetTextColor", text)
@@ -745,6 +745,13 @@ local function baseButton(parent, visual, template, name)
   function button:SetPadding(padding)
     self.insetLeft, self.insetRight = self.lead + padding, padding
     anchorLabel(self, true)
+  end
+
+  -- Optional tone (palette names for fill and border) worn while the button is idle; no arguments clear it.
+  -- Each brick's visual shows it in its own way.
+  function button:SetTone(bg, border)
+    self.toneBg, self.toneBorder = bg, border
+    self:Visual()
   end
 
   function button:Fit(width)
@@ -1069,11 +1076,7 @@ Bricks.register("toggle", "box", function(parent)
   function row:Visual()
     paint(self.box, "SetBackdropBorderColor", self.hovered and not self.disabledState and "buttonHover" or "checkboxBorder")
 
-    if self.value then
-      self.mark:Show()
-    else
-      self.mark:Hide()
-    end
+    Lib.setShown(self.mark, self.value)
   end
 
   row:SetValue(false)
@@ -2021,6 +2024,208 @@ local SCROLL_HORIZONTAL = { HORIZONTAL = true, BOTH = true }
 
 Bricks.SCROLL_VERTICAL = SCROLL_VERTICAL
 Bricks.SCROLL_HORIZONTAL = SCROLL_HORIZONTAL
+
+-- Lays out a card: the icon on the left, the title and the line under it beside the icon, up to inset
+-- pixels from the right edge, the two lines centered in the height of the card.
+function Bricks.placeCard(row, inset)
+  local size = S("board.row.icon")
+  local top = max(2, floor((row:GetHeight() - 25) / 2))
+
+  row.icon:SetWidth(size)
+  row.icon:SetHeight(size)
+  row.icon:ClearAllPoints()
+  row.icon:SetPoint("LEFT", row, "LEFT", 9, 0)
+  row.title:ClearAllPoints()
+  row.title:SetPoint("TOPLEFT", row, "TOPLEFT", 19 + size, -top)
+  row.title:SetPoint("RIGHT", row, "RIGHT", -inset, 0)
+  row.sub:ClearAllPoints()
+  row.sub:SetPoint("TOPLEFT", row.title, "BOTTOMLEFT", 0, -3)
+  row.sub:SetPoint("RIGHT", row, "RIGHT", -inset, 0)
+end
+
+local CARD_BADGES = {
+  take = { "heading", "!" },
+  daily = { "focus", "!" },
+  active = { "selected", "?" },
+  dailyActive = { "selected", "?" },
+  ready = { "success", "" },
+}
+
+local function fillOf(row, sub)
+  local texture = row:CreateTexture(nil, "BACKGROUND")
+
+  texture:SetDrawLayer("BACKGROUND", sub)
+  texture:SetTexture(Bricks.media("solid"))
+  texture:SetAllPoints(row)
+
+  return texture
+end
+
+local function edgesOf(frame, layer, key)
+  local size = S("border.size")
+  local lines = {}
+
+  for index = 1, 4 do
+    lines[index] = frame:CreateTexture(nil, layer)
+    lines[index]:SetTexture(Bricks.media("solid"))
+    paint(lines[index], "SetVertexColor", key)
+  end
+
+  lines[1]:SetHeight(size)
+  lines[1]:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+  lines[1]:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+  lines[2]:SetHeight(size)
+  lines[2]:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+  lines[2]:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+  lines[3]:SetWidth(size)
+  lines[3]:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+  lines[3]:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+  lines[4]:SetWidth(size)
+  lines[4]:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+  lines[4]:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+
+  return lines
+end
+
+local function shown(regions, state)
+  for _, region in ipairs(regions) do
+    Lib.setShown(region, state)
+  end
+end
+
+-- A card in the colors of the palette, drawn on the row it is given (a Button that carries
+-- icon, title and sub): a flat background, the hover and the selection over it, an outline when selected,
+-- a disk behind a round icon and a round state badge.
+Bricks.register("card", "default", function(row)
+  local look = { inset = 12 }
+  local bg, hover, pick = fillOf(row, -8), fillOf(row, -7), fillOf(row, -6)
+  local ring = row:CreateTexture(nil, "BACKGROUND")
+  local disk = row:CreateTexture(nil, "OVERLAY")
+  local check = row:CreateTexture(nil, "OVERLAY")
+  local glyph = Bricks.text(row, "small", "bg")
+  local badge = S("kit.badge.size")
+
+  paint(bg, "SetVertexColor", "card")
+  paint(hover, "SetVertexColor", "rowHover")
+  paint(pick, "SetVertexColor", "selected")
+  pick:SetAlpha(0.35)
+  look.edges = edgesOf(row, "BORDER", "focus")
+  ring:SetDrawLayer("BACKGROUND", 1)
+  ring:SetTexture(Bricks.media("circle"))
+  paint(ring, "SetVertexColor", "borderDim")
+  disk:SetTexture(Bricks.media("circle"))
+  disk:SetWidth(badge)
+  disk:SetHeight(badge)
+  disk:SetPoint("CENTER", row.icon, "BOTTOMLEFT", 2, 3)
+  check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+  check:SetAllPoints(disk)
+  paint(check, "SetVertexColor", "bg")
+  glyph:SetPoint("CENTER", disk, "CENTER", 0, 0)
+
+  function look:SetState(hovered, selected)
+    self.hovered, self.selected = hovered, selected
+
+    Lib.setShown(hover, hovered and not selected)
+
+    Lib.setShown(pick, selected)
+
+    shown(self.edges, selected)
+    paint(row.title, "SetTextColor", selected and "heading" or "text")
+  end
+
+  function look:SetBadge(kind)
+    local spec = CARD_BADGES[kind]
+
+    self.badgeKind = kind
+
+    if not spec then
+      disk:Hide()
+      glyph:Hide()
+      check:Hide()
+      return
+    end
+
+    paint(disk, "SetVertexColor", spec[1])
+    disk:Show()
+    glyph:SetText(spec[2])
+    glyph:Show()
+
+    Lib.setShown(check, kind == "ready")
+  end
+
+  function look:SetRound(round)
+    self.round = round
+
+    Lib.setShown(ring, round)
+  end
+
+  function look:SetInset(inset)
+    self.inset = inset
+    Bricks.placeCard(row, inset)
+  end
+
+  function look:Dress()
+    local size = S("board.row.icon") + 4
+
+    Bricks.placeCard(row, self.inset)
+    ring:ClearAllPoints()
+    ring:SetWidth(size)
+    ring:SetHeight(size)
+    ring:SetPoint("CENTER", row.icon, "CENTER", 0, 0)
+    Bricks.font(row.title, S("board.row.font"))
+    Bricks.font(row.sub, S("board.note.font"))
+    paint(row.sub, "SetTextColor", "muted")
+    bg:Show()
+    self:SetRound(self.round ~= false)
+    self:SetBadge(self.badgeKind)
+    self:SetState(self.hovered, self.selected)
+  end
+
+  function look:Undress()
+    shown({ bg, hover, pick, ring, disk, check, glyph }, false)
+    shown(self.edges, false)
+    Palette.unpaint(row.title, "SetTextColor")
+    Palette.unpaint(row.sub, "SetTextColor")
+  end
+
+  look:Dress()
+
+  return look
+end)
+
+-- A group header of a list of cards in the colors of the palette, drawn on the frame it is given (a Frame that
+-- carries text): its text and a line that runs to inset pixels from the right edge.
+Bricks.register("cardHeader", "default", function(header)
+  local look = { inset = 4 }
+  local line = header:CreateTexture(nil, "ARTWORK")
+
+  line:SetTexture(Bricks.media("solid"))
+  line:SetHeight(S("border.size"))
+  paint(line, "SetVertexColor", S("board.header.line"))
+
+  function look:SetInset(inset)
+    self.inset = inset
+    line:ClearAllPoints()
+    line:SetPoint("LEFT", header.text, "RIGHT", 8, 0)
+    line:SetPoint("RIGHT", header, "RIGHT", -inset, 0)
+  end
+
+  function look:Dress()
+    Bricks.font(header.text, S("board.header.font"))
+    paint(header.text, "SetTextColor", S("board.header.color"))
+    line:Show()
+    self:SetInset(self.inset)
+  end
+
+  function look:Undress()
+    line:Hide()
+    Palette.unpaint(header.text, "SetTextColor")
+  end
+
+  look:Dress()
+
+  return look
+end)
 
 -- Dresses the minimap button it is given, whose icon texture already exists: a ring and a disk in
 -- the colors of the skin.

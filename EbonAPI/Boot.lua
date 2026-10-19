@@ -17,6 +17,9 @@ local Problems = EbonAPI.Problems
 local Skins = EbonAPI.Skins
 local Bricks = EbonAPI.Bricks
 local Window = EbonAPI.Window
+local Modules = EbonAPI.ModuleLoader
+local AddonList = EbonAPI.AddonList
+local QuestLogChecks = EbonAPI.QuestLogChecks
 
 local ADDON_NAME = "EbonAPI"
 local safeCall = Lib.safeCall
@@ -48,6 +51,7 @@ onPlayerLogin = function()
   safeCall(EbonAPI.Catch.login)
   safeCall(DB.bindCharacter)
   safeCall(Session.begin)
+  safeCall(Modules.load)
   safeCall(Ebonhold.Detect)
 
   safeCall(Bridge.enable)
@@ -57,6 +61,8 @@ onPlayerLogin = function()
   safeCall(Version.enable)
   safeCall(Share.enable)
   safeCall(Window.install)
+  safeCall(AddonList.install)
+  safeCall(QuestLogChecks.install)
 
   EbonAPI._ready = true
   EbonAPI:Emit("READY", EbonAPI.version)

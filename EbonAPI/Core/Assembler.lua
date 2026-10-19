@@ -4,7 +4,7 @@ EbonAPI.Assembler = {}
 local Assembler = EbonAPI.Assembler
 local Bus = EbonAPI.Bus
 
-local pairs, next, setmetatable = pairs, next, setmetatable
+local pairs, next, setmetatable, type = pairs, next, setmetatable, type
 local concat = table.concat
 
 local Streams = {}
@@ -14,13 +14,14 @@ local function now()
   return (GetTime and GetTime()) or 0
 end
 
-function Assembler.new(tickId, timeout, sweep, maxParts, onExpire)
+function Assembler.new(tickId, timeout, sweep, maxParts, onExpire, paced)
   local self = setmetatable({
     tickId = tickId,
     timeout = timeout,
     sweep = sweep,
     maxParts = maxParts,
     onExpire = onExpire,
+    paced = paced,
     streams = {},
     live = 0,
   }, Streams)
@@ -30,6 +31,21 @@ function Assembler.new(tickId, timeout, sweep, maxParts, onExpire)
   end
 
   return self
+end
+
+-- Seconds a stream may stay silent. A paced assembler follows the wait limit of EbonAPI.Pace, never under
+-- its own timeout, which is also what it falls back on when Pace is missing or answers no number.
+function Streams:silence()
+  if self.paced then
+    local Pace = EbonAPI.Pace
+    local value = Pace and Pace.limit and Pace.limit()
+
+    if type(value) == "number" and value >= self.timeout then
+      return value
+    end
+  end
+
+  return self.timeout
 end
 
 function Streams:drop(owner, id, byId)
@@ -92,9 +108,11 @@ function Streams:add(owner, id, index, total, slice, at)
 end
 
 function Streams:purge(current)
+  local timeout = self:silence()
+
   for owner, byId in pairs(self.streams) do
     for id, record in pairs(byId) do
-      if current - record.at > self.timeout then
+      if current - record.at > timeout then
         self:drop(owner, id, byId)
         if self.onExpire then
           self.onExpire(owner, id, record)

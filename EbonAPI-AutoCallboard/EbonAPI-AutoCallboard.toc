@@ -1,0 +1,73 @@
+## Interface: 30300
+## Title: EbonAPI - |cffb048f8AutoCallboard|r
+## Notes: Automates Callboard rolling and selection for wanted quests. Save and switch between multiple quest selections.
+## Author: Disarray (fork maintained by Siphelis)
+## Version: 4.0.1
+## Dependencies: EbonAPI
+## OptionalDeps: AutoCallboardPresets
+## LoadOnDemand: 1
+## X-EbonAPI-Module: 1
+## X-EbonAPI-Name: AutoCallboard
+## SavedVariables: EbonAPIAutoCallboardDB, EbonAPIAutoCallboardQuestDB, EbonAPIAutoCallboardEternalsDB
+## X-EbonAPI-Legacy: AutoCallboard
+## X-EbonAPI-Legacy-Variables: AutoCallboardDB=EbonAPIAutoCallboardDB,AutoCallboardQuestDB=EbonAPIAutoCallboardQuestDB,AutoCallboardEternalsDB=EbonAPIAutoCallboardEternalsDB
+
+Locales\enUS.lua
+Locales\frFR.lua
+Locales\deDE.lua
+Locales\esES.lua
+Language\Locale.lua
+Core\Core.lua
+Core\Appearance.lua
+Core\Commands.lua
+Core\Container.lua
+Core\Selections.lua
+Core\Routes.lua
+Core\QuestFaction.lua
+Core\RouteCode.lua
+Core\RouteLibrary.lua
+Core\ArrowSkins.lua
+Core\QuestImportExport.lua
+Core\InstanceMatcher.lua
+UI\Skin.lua
+Core\Util.lua
+Core\State.lua
+Core\Migration.lua
+Automation\Instance.lua
+Automation\Callboard.lua
+Features\Share.lua
+Automation\Roll.lua
+UI\Help.lua
+Automation\Difficulty.lua
+Features\Builds.lua
+UI\Browser.lua
+UI\Lists.lua
+UI\QuestData.lua
+Language\Switcher.lua
+UI\QuestWindow.lua
+UI\ControlFrame.lua
+UI\Settings.lua
+AutoCallboard.lua
+Problems\Callboard.lua
+Problems\Roll.lua
+Problems\Core.lua
+Problems\RouteCode.lua
+Problems\Routes.lua
+Problems\Builds.lua
+Problems\Share.lua
+Problems\Recorder.lua
+Problems\Player.lua
+Problems\Lists.lua
+Problems\Windows.lua
+Features\Eternals.lua
+Features\TravelData.lua
+Features\Travel.lua
+Features\RouteRecorder.lua
+Features\RoutePlayer.lua
+Features\RouteShare.lua
+UI\RouteArrow.lua
+UI\ArrowGallery.lua
+UI\RouteWindow.lua
+UI\RouteBrowsers.lua
+Features\Update.lua
+Features\Api.lua

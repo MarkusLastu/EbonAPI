@@ -1,0 +1,11 @@
+<Bindings>
+	<Binding name="AUTOCALLBOARD_ECHO1" header="AutoCallboard">
+		AutoCallboardRuntime.TriggerEchoSlot(1)
+	</Binding>
+	<Binding name="AUTOCALLBOARD_ECHO2">
+		AutoCallboardRuntime.TriggerEchoSlot(2)
+	</Binding>
+	<Binding name="AUTOCALLBOARD_ECHO3">
+		AutoCallboardRuntime.TriggerEchoSlot(3)
+	</Binding>
+</Bindings>

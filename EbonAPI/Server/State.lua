@@ -645,16 +645,20 @@ local function onBuildAck(body)
   end
 end
 
-local function onTreeResult(body)
+local function flagResult(body, name, opcode, code)
   local flag = match(tostring(body), "^([01])$")
 
   if flag == "1" then
-    result("tree")
+    result(name)
   elseif flag == "0" then
-    result("tree", refuse("SERVER.TREE_REFUSED"))
+    result(name, refuse(code))
   else
-    reject(SS.SKILL_TREE_UPDATE_SPELL_CAST_RESULT, "bad_flag", "flag", body)
+    reject(opcode, "bad_flag", "flag", body)
   end
+end
+
+local function onTreeResult(body)
+  flagResult(body, "tree", SS.SKILL_TREE_UPDATE_SPELL_CAST_RESULT, "SERVER.TREE_REFUSED")
 end
 
 local function onPickResult(body)
@@ -670,15 +674,7 @@ local function onPickResult(body)
 end
 
 local function onFreezeResult(body)
-  local flag = match(tostring(body), "^([01])$")
-
-  if flag == "1" then
-    result("freeze")
-  elseif flag == "0" then
-    result("freeze", refuse("SERVER.FREEZE_REFUSED"))
-  else
-    reject(SS.FREEZE_PERK_RESULT, "bad_flag", "flag", body)
-  end
+  flagResult(body, "freeze", SS.FREEZE_PERK_RESULT, "SERVER.FREEZE_REFUSED")
 end
 
 local function onResetResult(body)

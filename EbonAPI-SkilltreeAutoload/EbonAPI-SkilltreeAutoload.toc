@@ -1,0 +1,35 @@
+## Interface: 30300
+## Title: EbonAPI - SkillTreeAutoLoad
+## Notes: Save and restore Skill Tree configurations (ProjectEbonhold)
+## Dependencies: EbonAPI
+## OptionalDeps: ProjectEbonhold
+## Author: Siphelis
+## Version: 2.0.0
+## X-License: PolyForm Strict License 1.0.0
+## LoadOnDemand: 1
+## X-EbonAPI-Module: 1
+## X-EbonAPI-Name: SkillTreeAutoLoad
+## SavedVariables: EbonAPISkillTreeAutoLoadAccountDB
+## SavedVariablesPerCharacter: EbonAPISkillTreeAutoLoadDB
+## X-EbonAPI-Legacy: SkillTreeAutoLoad
+## X-EbonAPI-Legacy-Variables: SkillTreeAutoLoadAccountDB=EbonAPISkillTreeAutoLoadAccountDB
+## X-EbonAPI-Legacy-CharacterVariables: SkillTreeAutoLoadDB=EbonAPISkillTreeAutoLoadDB
+
+init.lua
+
+locales\enUS.lua
+locales\frFR.lua
+locales\deDE.lua
+locales\esES.lua
+
+modules\problems.lua
+modules\core.lua
+modules\plan.lua
+modules\overlay.lua
+modules\view.lua
+modules\data.lua
+modules\bridge.lua
+modules\menus.lua
+modules\ui.lua
+modules\update.lua
+modules\main.lua

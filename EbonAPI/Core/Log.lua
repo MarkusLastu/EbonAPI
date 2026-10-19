@@ -12,6 +12,14 @@ Log.COLOR = {
   RESET = "|r",
 }
 
+Log.LEVELS = {
+  error = "bad", problem_internal = "bad",
+  problem = "warn", fail = "warn", offline = "warn", cut = "warn", warn = "warn", problem_text_missing = "warn",
+  success = "ok",
+  send = "net", recv = "net", chan = "net", wisp = "net", share = "net",
+  boot = "info", module = "info", skin = "info", migration = "info", debug = "info", print = "info",
+}
+
 local function join(...)
   local count = select("#", ...)
 
@@ -129,6 +137,44 @@ function Log.dump(limit, kind)
   return concat(lines, "\n")
 end
 
+function Log.levelOf(kind)
+  return Log.LEVELS[kind] or "info"
+end
+
+function Log.rows(limit, kind)
+  local rows = {}
+  local now = GetTime and GetTime() or 0
+
+  limit = limit or 20
+
+  local index = cursor
+
+  for _ = 1, filled do
+    if not kind or tKind[index] == kind then
+      rows[#rows + 1] = {
+        age = now - tAt[index],
+        at = tAt[index],
+        kind = tKind[index],
+        owner = tOwner[index],
+        text = describe(tA[index], tB[index]),
+        level = Log.levelOf(tKind[index]),
+      }
+
+      if #rows >= limit then
+        break
+      end
+    end
+
+    index = index - 1
+
+    if index == 0 then
+      index = filled
+    end
+  end
+
+  return rows
+end
+
 function Log.print(owner, ...)
   Log.trace("print", owner, join(...))
 end
@@ -241,24 +287,10 @@ function Handle:Trace(kind, a, b)
   Log.note(self.addonName, kind, a, b)
 end
 
-function Handle:Print(...)
-  Log.print(self.addonName, ...)
-end
-
-function Handle:Warn(...)
-  Log.warn(self.addonName, ...)
-end
-
-function Handle:Error(...)
-  Log.error(self.addonName, ...)
-end
-
-function Handle:Success(...)
-  Log.success(self.addonName, ...)
-end
-
-function Handle:Debug(...)
-  Log.debug(self.addonName, ...)
+for name, key in pairs({ Print = "print", Warn = "warn", Error = "error", Success = "success", Debug = "debug" }) do
+  Handle[name] = function(self, ...)
+    Log[key](self.addonName, ...)
+  end
 end
 
 function Handle:SetDebug(enabled)

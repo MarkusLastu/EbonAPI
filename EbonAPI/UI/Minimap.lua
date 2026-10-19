@@ -401,11 +401,7 @@ function Buttons.layout()
       dock(button, Minimap)
       place(button, angleOf(button))
 
-      if display == "HIDDEN" then
-        button:Hide()
-      else
-        button:Show()
-      end
+      Lib.setShown(button, display ~= "HIDDEN")
     end
   end
 

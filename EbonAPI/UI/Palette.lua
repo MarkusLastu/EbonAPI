@@ -12,7 +12,7 @@ local format = string.format
 
 local KEYS = Catalog.PALETTE
 local CLASSES = {
-  background = { "bg", "bgSoft", "card", "checkbox", "headerBg", "navBg", "pageBg", "footerBg" },
+  background = { "bg", "bgSoft", "card", "checkbox", "headerBg", "navBg", "pageBg", "footerBg", "well" },
   foreground = { "text", "muted", "title" },
   fixed = { "buttonText", "buttonDisabledText", "selectedText", "shadow", "success", "danger", "caution" },
   accent = {
