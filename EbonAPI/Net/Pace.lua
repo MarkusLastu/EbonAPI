@@ -11,6 +11,7 @@ local huge = math.huge
 local TICK_ID = "EbonAPI:pace"
 local TICK = 1
 local PAUSE = 5
+local FALL_AFTER = 3
 local WINDOW = 15
 local LEVEL_GAIN, TREND_GAIN = 0.5, 0.25
 local HORIZON = 10
@@ -30,6 +31,7 @@ local EPSILON = 0.01
 Pace.TICK_ID = TICK_ID
 Pace.TICK = TICK
 Pace.PAUSE = PAUSE
+Pace.FALL_AFTER = FALL_AFTER
 Pace.WINDOW = WINDOW
 Pace.LEVEL_GAIN = LEVEL_GAIN
 Pace.TREND_GAIN = TREND_GAIN
@@ -208,8 +210,8 @@ end
 --    empty, busy on average (above BUSY) and not falling by about 10% (WINDOW_FALL) from the first
 --    second to the last. A burst empties by itself and never gets here. Step: 1, 2 or 3 by Holt's
 --    forecast at HORIZON (FORECAST_STEPS), never above the ceiling.
---  * fall above the normal rate: every PAUSE seconds, one step of 1 down to the base, when the queue
---    stayed empty and the sends were below the rate.
+--  * fall above the normal rate: once the queue stayed empty for FALL_AFTER seconds and the sends were
+--    below the rate, straight back to the base in one decision.
 --  * fall below the normal rate: on a full WINDOW with the queue empty and fewer than QUIET_OUT sends
 --    per second, one step of 1 down to REST_RATE.
 local function decide(rate)
@@ -223,9 +225,9 @@ local function decide(rate)
     target = target < top and target or top
     why = "rise"
   elseif rate > base + EPSILON then
-    if since >= PAUSE and maxLast(lens, PAUSE) < EMPTY and sumLast(outs, PAUSE) / PAUSE < rate - SLACK then
-      target = rate - 1
-      target = target > base and target or base
+    if since >= FALL_AFTER and maxLast(lens, FALL_AFTER) < EMPTY
+      and sumLast(outs, FALL_AFTER) / FALL_AFTER < rate - SLACK then
+      target = base
       why = "fall"
     end
   elseif rate > REST_RATE + EPSILON and since >= WINDOW and maxLast(lens, WINDOW) < EMPTY
