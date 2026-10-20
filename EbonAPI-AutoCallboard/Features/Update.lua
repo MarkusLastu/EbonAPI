@@ -29,7 +29,6 @@ local function OnUpdateAvailable(_, name)
 end
 
 function RT.InitVersionWatch()
-  RT.api:Version(RT.GetAddonVersion(), RT.updateUrl)
   RT.api:On("UPDATE_AVAILABLE", OnUpdateAvailable)
   RT.api:On("READY", RefreshNotice)
 end

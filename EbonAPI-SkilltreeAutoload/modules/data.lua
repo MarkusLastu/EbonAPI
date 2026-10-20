@@ -399,3 +399,65 @@ function Data.IsPreviewCamera()
     return DB().settings.noPreviewCamera ~= true
 end
 
+
+local VIEWS = { list = true, grid = true, gauge = true }
+local DETAILS = { inline = true, dock = true }
+local SORTS = { name = true, pct = true, cost = true }
+local MIN_WIDTH, MAX_WIDTH = 200, 280
+
+function Data.SetView(view)
+    if view ~= nil and not VIEWS[view] then return false end
+    DB().settings.view = view
+    return true
+end
+
+function Data.GetView()
+    local view = DB().settings.view
+    return VIEWS[view] and view or nil
+end
+
+function Data.SetDetail(detail)
+    if detail ~= nil and not DETAILS[detail] then return false end
+    DB().settings.detail = detail
+    return true
+end
+
+function Data.GetDetail()
+    local detail = DB().settings.detail
+    return DETAILS[detail] and detail or nil
+end
+
+function Data.SetSort(sort)
+    if not SORTS[sort] then return false end
+    DB().settings.sort = (sort ~= "name") and sort or nil
+    return true
+end
+
+function Data.GetSort()
+    local sort = DB().settings.sort
+    return SORTS[sort] and sort or "name"
+end
+
+function Data.SetGrouped(grouped)
+    if type(grouped) ~= "boolean" then return false end
+    DB().settings.ungrouped = (not grouped) and true or nil
+    return true
+end
+
+function Data.IsGrouped()
+    return DB().settings.ungrouped ~= true
+end
+
+function Data.SetPanelWidth(width)
+    if width ~= nil and (type(width) ~= "number" or width ~= width or width < MIN_WIDTH or width > MAX_WIDTH) then
+        return false
+    end
+    DB().settings.panelWidth = width
+    return true
+end
+
+function Data.GetPanelWidth()
+    local width = DB().settings.panelWidth
+    if type(width) == "number" and width >= MIN_WIDTH and width <= MAX_WIDTH then return width end
+    return nil
+end

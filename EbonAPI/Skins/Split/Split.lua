@@ -9,4 +9,9 @@ EbonAPI:RegisterSkin("Split", {
   header = {
     controls = "LEFT",
   },
+
+  widgets = {
+    -- Saves: like AutoCallboard, but the detail drawer docks at the bottom of the panel.
+    saves = { view = "list", detail = "dock", row = { frame = "SMALL", fill = "card", border = "borderDim" } },
+  },
 })

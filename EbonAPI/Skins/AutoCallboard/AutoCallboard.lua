@@ -84,6 +84,8 @@ EbonAPI:RegisterSkin("AutoCallboard", {
     input = { brick = "default", field = 22 },
     group = { padding = 10, frame = "LARGE" },
     synthesis = { brick = "cards", tile = { width = 210 } },
+    -- Saves: rows as small rounded cards, the detail drawer under the chosen row.
+    saves = { view = "list", detail = "inline", row = { frame = "SMALL", fill = "card", border = "borderDim" } },
     output = { brick = "default" },
   },
 

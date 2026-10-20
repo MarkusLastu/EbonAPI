@@ -153,7 +153,7 @@ function Version.register(name, text)
 
   local parsed, release = Version.parse(text)
 
-  if not parsed then
+  if not parsed or (EbonAPI.ModuleLoader and EbonAPI.ModuleLoader.owns(name)) then
     return false
   end
 

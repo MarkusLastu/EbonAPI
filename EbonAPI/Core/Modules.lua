@@ -40,7 +40,7 @@ local function discover()
     if name and metadata(name, FIELD) == "1" then
       -- A module ships inside EbonAPI and has no version of its own: it takes EbonAPI's.
       local module = { name = name, key = metadata(name, KEY_FIELD) or name, title = title or name,
-        notes = notes ~= "" and notes or nil, version = metadata(name, "Version") or EbonAPI.version }
+        notes = notes ~= "" and notes or nil, version = EbonAPI.version }
 
       list[#list + 1] = module
       byName[name] = module
@@ -106,6 +106,32 @@ function Modules.isModule(name)
   discover()
 
   return byName[name] ~= nil
+end
+
+-- True for a module named by its folder or by its key (the name it gives to EbonAPI:NewAddon).
+function Modules.owns(name)
+  discover()
+
+  if byName[name] then
+    return true
+  end
+
+  for _, module in ipairs(list) do
+    if module.key == name then
+      return true
+    end
+  end
+
+  return false
+end
+
+-- A module has no version of its own: it is EbonAPI's. Any other addon keeps the one of its `.toc`.
+function Modules.versionOf(name)
+  if Modules.owns(name) then
+    return EbonAPI.version
+  end
+
+  return metadata(name, "Version")
 end
 
 function Modules.isEnabled(name)

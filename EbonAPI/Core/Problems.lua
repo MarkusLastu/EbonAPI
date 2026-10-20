@@ -135,7 +135,14 @@ local function versionOf(addon)
   local version = versions[addon]
 
   if version == nil then
-    version = (GetAddOnMetadata and GetAddOnMetadata(addon, "Version")) or false
+    -- A module has no version of its own: it is EbonAPI's.
+    local Modules = EbonAPI.ModuleLoader
+
+    if Modules and Modules.owns(addon) then
+      version = EbonAPI.version
+    else
+      version = (GetAddOnMetadata and GetAddOnMetadata(addon, "Version")) or false
+    end
     versions[addon] = version
   end
 
@@ -842,7 +849,7 @@ function Problems.copyText(entry)
       local name = GetAddOnInfo(i)
 
       if name and IsAddOnLoaded and IsAddOnLoaded(i) then
-        names[#names + 1] = name .. " " .. tostring(GetAddOnMetadata and GetAddOnMetadata(name, "Version") or "?")
+        names[#names + 1] = name .. " " .. tostring(versionOf(name) or "?")
       end
     end
 

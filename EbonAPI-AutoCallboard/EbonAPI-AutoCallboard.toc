@@ -2,7 +2,6 @@
 ## Title: EbonAPI - |cffb048f8AutoCallboard|r
 ## Notes: Automates Callboard rolling and selection for wanted quests. Save and switch between multiple quest selections.
 ## Author: Disarray (fork maintained by Siphelis)
-## Version: 4.0.1
 ## Dependencies: EbonAPI
 ## OptionalDeps: AutoCallboardPresets
 ## LoadOnDemand: 1

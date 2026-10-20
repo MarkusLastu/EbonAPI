@@ -1,7 +1,7 @@
 ## Interface: 30300
 ## Title: |cff8a6fd4EbonAPI|r
 ## Author: Siphelis
-## Version: 2.2.2
+## Version: 2.2.3-0
 ## SavedVariables: EbonAPIDB
 
 Core\Catch.lua
@@ -60,6 +60,9 @@ UI\Window.lua
 UI\Kit.lua
 UI\Alerts.lua
 UI\Stack.lua
+UI\SavesData.lua
+UI\SavesViews.lua
+UI\Saves.lua
 UI\Minimap.lua
 UI\Settings.lua
 UI\Center.lua

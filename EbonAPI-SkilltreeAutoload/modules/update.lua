@@ -18,6 +18,5 @@ end
 function Update.Init()
     if not NS.api then return end
 
-    NS.api:Version(GetAddOnMetadata(ADDON_NAME, "Version"), Update.URL)
     NS.api:On("UPDATE_AVAILABLE", OnUpdateAvailable)
 end

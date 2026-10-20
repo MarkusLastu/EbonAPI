@@ -4251,6 +4251,23 @@ local function track(window)
   end)
 end
 
+-- Sets the level of a frame and of all its descendants, each one at the level of its parent plus the offset it had: a
+-- client that moves the children along with their parent ends at the same levels as one that does not.
+local function relevel(frame, level)
+  local children = { frame:GetChildren() }
+  local base, offsets = frame:GetFrameLevel(), {}
+
+  for index, child in ipairs(children) do
+    offsets[index] = child:GetFrameLevel() - base
+  end
+
+  frame:SetFrameLevel(level)
+
+  for index, child in ipairs(children) do
+    relevel(child, level + offsets[index])
+  end
+end
+
 local function lay(window, at)
   local host = at.frame
   local right = at.side == "RIGHT"
@@ -4267,12 +4284,21 @@ local function lay(window, at)
     top, bottom = 0 - (insets.top or 0), insets.bottom or 0
     window:SetParent(host)
     window:SetFrameStrata(host:GetFrameStrata())
+    -- A window left at the level of its parent shows between the frames the host holds: a talent tree stacks its nodes
+    -- a dozen levels over its own frame. The window and its content rise above all of them.
+    relevel(window, host:GetFrameLevel() + 40)
+    window.kitRaised = true
   else
     anchor, edge = host, right and "LEFT" or "RIGHT"
     x = right and (at.gap or 0) or 0 - (at.gap or 0)
     top, bottom = 0, 0
     window:SetParent(UIParent)
     window:SetFrameStrata("DIALOG")
+
+    if window.kitRaised then
+      window.kitRaised = nil
+      relevel(window, UIParent:GetFrameLevel() + 1)
+    end
   end
 
   window:SetPoint("TOP" .. edge, anchor, "TOP" .. side, x, top)
@@ -4421,7 +4447,9 @@ function Kit.window(owner, id, spec)
       local buttons = (self.close and self.close:IsShown() and self.close:GetWidth() or 0) + pad
 
       for _, element in ipairs(self.headButtons) do
-        buttons = buttons + element:GetWidth() + floor(pad / 2)
+        if element:IsShown() then
+          buttons = buttons + element:GetWidth() + floor(pad / 2)
+        end
       end
 
       local title = self.title:GetStringWidth() or 0
@@ -4449,7 +4477,7 @@ function Kit.window(owner, id, spec)
     if self.kitShaded then
       self:Resize(outerWidth, self.head:GetHeight())
     else
-      self:Resize(outerWidth, not self.kitAttach and outerHeight or nil)
+      self:Resize(outerWidth, (not self.kitAttach or self.kitFit) and outerHeight or nil)
     end
   end
 

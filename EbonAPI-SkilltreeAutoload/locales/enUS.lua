@@ -11,6 +11,9 @@ NS.L = EbonAPI.Locale.register("SkillTreeAutoLoad", { enUS = {
     BTN_EXPAND = "+",
     MENU_COMPACT = "Compact mode",
     MENU_PREVIEW_CAMERA = "Frame the tree on hover",
+    MENU_DETAIL_DOCK = "Detail at the bottom of the panel",
+    MENU_PANEL_WIDTH = "Panel width",
+    PANEL_TITLE = "STAL",
     UNGROUPED = "Uncategorized",
     EMPTY_LIST = "No saves yet. Use the '...' menu to save the current state of the tree.",
 

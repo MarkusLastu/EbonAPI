@@ -199,6 +199,11 @@ EbonAPI:RegisterSkin("Porcelain", {
     group = { padding = 12, title = 20, titleX = 4, color = "title" },
     scroll = { thumb = 30, trackAlpha = 0 },
     synthesis = { brick = "widgets", tile = { width = 130 }, value = { font = "large" } },
+    -- Saves: each group is a small card with an upper-case title, thin flat rows inside.
+    saves = {
+      view = "list", detail = "inline",
+      group = { frame = "SMALL", fill = "card", upper = true }, row = { frame = "FLAT" },
+    },
     output = { brick = "grouped" },
   },
 

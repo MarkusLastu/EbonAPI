@@ -1,6 +1,5 @@
 ## Interface: 30300
 ## Title: EbonAPI - EbonBuilds
-## Version: 3.0.4
 ## X-Website: https://github.com/Siphelis/EbonBuilds/releases/latest
 ## Dependencies: EbonAPI
 ## OptionalDeps: ProjectEbonhold

@@ -155,28 +155,43 @@ local function OpenMenu(anchor)
     end
 end
 
+function Menus.NewSave()
+    Menus.PromptText(L.PROMPT_NEW_SAVE, nil, function(raw)
+        local name = CleanName(raw)
+        if not name then
+            RejectName(raw)
+            return
+        end
+
+        local nodeRanks, err = NS.Core.CaptureTreeState()
+        if not nodeRanks then
+            CaptureFailed(err)
+            return
+        end
+
+        NS.Data.CreateSave(name, nil, nodeRanks)
+        NS.UI.RefreshList()
+    end)
+end
+
+local WIDTHS = { 200, 240, 280 }
+
 function Menus.ShowPanelMenu(anchor)
-    UIDropDownMenu_Initialize(dropdown, function(_, level)
+    UIDropDownMenu_Initialize(dropdown, function(_, level, menuList)
         level = level or 1
 
-        AddButton(level, L.MENU_NEW_SAVE, function()
-            Menus.PromptText(L.PROMPT_NEW_SAVE, nil, function(raw)
-                local name = CleanName(raw)
-                if not name then
-                    RejectName(raw)
-                    return
-                end
+        if level == 2 and menuList == "WIDTH" then
+            local current = NS.UI.GetPanelWidth()
+            for _, width in ipairs(WIDTHS) do
+                AddToggle(level, tostring(width), current == width, function()
+                    CloseDropDownMenus()
+                    NS.UI.SetPanelWidth(width)
+                end)
+            end
+            return
+        end
 
-                local nodeRanks, err = NS.Core.CaptureTreeState()
-                if not nodeRanks then
-                    CaptureFailed(err)
-                    return
-                end
-
-                NS.Data.CreateSave(name, nil, nodeRanks)
-                NS.UI.RefreshList()
-            end)
-        end)
+        AddButton(level, L.MENU_NEW_SAVE, Menus.NewSave)
 
         AddButton(level, L.MENU_NEW_GROUP, function()
             Menus.PromptText(L.PROMPT_NEW_GROUP, nil, function(raw)
@@ -197,6 +212,12 @@ function Menus.ShowPanelMenu(anchor)
         AddToggle(level, L.MENU_PREVIEW_CAMERA, NS.Data.IsPreviewCamera(), function()
             NS.Data.SetPreviewCamera(not NS.Data.IsPreviewCamera())
         end)
+
+        AddToggle(level, L.MENU_DETAIL_DOCK, NS.UI.GetDetail() == "dock", function()
+            NS.UI.SetDetail(NS.UI.GetDetail() == "dock" and "inline" or "dock")
+        end)
+
+        AddButton(level, L.MENU_PANEL_WIDTH, nil, true, "WIDTH")
     end, "MENU")
 
     OpenMenu(anchor)

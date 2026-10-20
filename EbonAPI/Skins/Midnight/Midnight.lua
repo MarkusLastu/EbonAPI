@@ -23,6 +23,11 @@ EbonAPI:RegisterSkin("Midnight", {
     heading = { lines = "AFTER" },
     range = { fill = true },
     synthesis = { brick = "glass", tile = { width = 150 } },
+    -- Saves: gauge rows of glass, a glow in the focus color on the chosen one.
+    saves = {
+      view = "gauge", detail = "inline",
+      row = { frame = "SMALL", fill = "card", border = "borderDim", selected = "focus" },
+    },
   },
 
   bricks = {

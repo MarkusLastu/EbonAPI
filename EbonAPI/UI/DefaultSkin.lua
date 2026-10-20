@@ -137,6 +137,8 @@ EbonAPI:RegisterSkin("Azeroth", {
     grain = "Interface\\AddOns\\EbonAPI\\Media\\Grain",
     circle = "Interface\\AddOns\\EbonAPI\\Media\\Circle",
     chevron = "Interface\\AddOns\\EbonAPI\\Media\\Chevron",
+    ring = "Interface\\AddOns\\EbonAPI\\Media\\Ring.tga",
+    icons = "Interface\\AddOns\\EbonAPI\\Media\\Icons.tga",
     sidebar = "Interface\\AddOns\\EbonAPI\\Media\\Sidebar",
     error = "Interface\\AddOns\\EbonAPI\\Media\\Error",
     warning = "Interface\\AddOns\\EbonAPI\\Media\\Warning",
@@ -317,6 +319,19 @@ EbonAPI:RegisterSkin("Azeroth", {
       brick = "slots", tile = { width = 150, height = 54 }, gap = 6,
       label = { font = "small" }, value = { font = "normal" }, group = { color = "heading" },
       fill = "card", border = "borderDim", selected = "focus",
+    },
+    saves = {
+      brick = "default", view = "grid", detail = "dock", search = false, width = 240,
+      font = "normal", small = { font = "small" },
+      row = {
+        height = 28, gap = 2, frame = "FLAT", fill = "well", border = "borderDim",
+        hover = "rowHover", selected = "selected",
+      },
+      cell = { size = 50, gap = 5, frame = "SMALL", fill = "card" },
+      group = { frame = "FLAT", fill = "card", color = "heading", upper = false },
+      drawer = { frame = "SMALL", fill = "well", border = "borderDim" },
+      owned = "heading", now = "success", later = "caution",
+      ring = { size = 18, big = 38 },
     },
     group = {
       brick = "card", padding = 12, title = 18, titleX = 2,

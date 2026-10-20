@@ -38,7 +38,6 @@ OnAddonLoaded = function(addonName)
         { "Automation",           function() EbonBuilds.Automation.Init()      end },
         { "EchoStars",            function() EbonBuilds.EchoStars.Init()       end },
         { "Sync",                 function() EbonBuilds.Sync.Init()            end },
-        { "Version",              function() EbonBuilds.api:Version(GetAddOnMetadata(EbonBuilds.FOLDER, "Version"), GetAddOnMetadata(EbonBuilds.FOLDER, "X-Website")) end },
     }
 
     for i = 1, #steps do

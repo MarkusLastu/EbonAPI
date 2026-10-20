@@ -22,14 +22,6 @@ local function GetQuestTypeName(questType)
   return L.QUEST_TYPE_NAMES[questType] or L.QUEST_TYPE_OTHER
 end
 
-local function GetAddonVersion()
-  if GetAddOnMetadata and ADDON_NAME then
-    return GetAddOnMetadata(ADDON_NAME, "Version") or "unknown"
-  end
-
-  return "unknown"
-end
-
 local function LinkMethod()
   return RT.api:LinkMethod()
 end
@@ -421,7 +413,6 @@ end
 RT.NewEventRelay = NewEventRelay
 RT.Localized = Localized
 RT.GetQuestTypeName = GetQuestTypeName
-RT.GetAddonVersion = GetAddonVersion
 RT.LinkMethod = LinkMethod
 RT.OpenLink = OpenLink
 RT.LinkTip = LinkTip

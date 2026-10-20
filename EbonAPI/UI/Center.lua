@@ -64,7 +64,7 @@ end
 
 local function isCurrent(entry)
   local seen = entry.versions and entry.versions.addon
-  local now = rawget(_G, "GetAddOnMetadata") and GetAddOnMetadata(entry.addon, "Version")
+  local now = rawget(_G, "GetAddOnMetadata") and EbonAPI.ModuleLoader.versionOf(entry.addon)
 
   return seen == nil or now == nil or seen == now
 end
@@ -274,7 +274,8 @@ local function sheet(entry)
   end
 
   line("origin", function()
-    local text = format(L.CENTER_SHEET_ORIGIN, tostring(entry.addon), tostring(entry.versions and entry.versions.addon or "?"))
+    local text = format(L.CENTER_SHEET_ORIGIN, tostring(entry.addon), tostring(EbonAPI.ModuleLoader.owns(entry.addon) and EbonAPI.version
+      or entry.versions and entry.versions.addon or "?"))
 
     if entry.where then
       text = text .. "\n" .. format(L.CENTER_SHEET_WHERE, tostring(entry.where))

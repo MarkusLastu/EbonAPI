@@ -440,7 +440,7 @@ HELP_TAB_DISPLAY = "Réglages",
 
 HELP_SECTIONS = {
   about = {
-    "# AutoCallboard {version}",
+    "# AutoCallboard",
     "@update Nouvelle version disponible : {latest}. Ouvrir la page de téléchargement.",
     "AutoCallboard est un addon pour World of Warcraft 3.3.5a, conçu pour le serveur Project Ebonhold.",
     "Il automatise les relances du Callboard, mémorise les quêtes rencontrées et permet d'enregistrer puis de rejouer des trajets. L'ensemble de ses fonctionnalités peut être configuré directement depuis son interface.",

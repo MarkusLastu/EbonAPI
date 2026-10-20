@@ -105,6 +105,11 @@ EbonAPI:RegisterSkin("Tiling", {
     group = { brick = "line", upper = true, font = "small", padding = 8 },
     scroll = { trackAlpha = 0.3 },
     synthesis = { brick = "pills" },
+    -- Saves: grid of large-framed cells, upper-case group titles, pill rows when the player picks the list.
+    saves = {
+      view = "grid", detail = "dock", cell = { frame = "LARGE" }, row = { frame = "LARGE" },
+      group = { upper = true },
+    },
   },
 
   bricks = {

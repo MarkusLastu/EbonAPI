@@ -349,7 +349,7 @@ local function connectionProblem(name, info)
     return 'connection option "version" needs updates = true'
   end
 
-  if info.updates then
+  if info.updates and not EbonAPI.ModuleLoader.owns(name) then
     local version = info.version or (GetAddOnMetadata and GetAddOnMetadata(name, "Version"))
 
     if not EbonAPI.Version.parse(version) then
@@ -369,7 +369,8 @@ local function connect(handle, name, info)
     handle.icon = info.icon
   end
 
-  if info.updates then
+  -- A module follows EbonAPI's version: nothing to register for it.
+  if info.updates and not EbonAPI.ModuleLoader.owns(name) then
     EbonAPI.Version.register(name, info.version or GetAddOnMetadata(name, "Version"))
   end
 end

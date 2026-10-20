@@ -4,7 +4,6 @@
 ## Dependencies: EbonAPI
 ## OptionalDeps: ProjectEbonhold
 ## Author: Siphelis
-## Version: 2.0.0
 ## X-License: PolyForm Strict License 1.0.0
 ## LoadOnDemand: 1
 ## X-EbonAPI-Module: 1

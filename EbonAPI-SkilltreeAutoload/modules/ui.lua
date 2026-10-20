@@ -6,6 +6,13 @@ local UI = {}
 NS.UI = UI
 
 local NO_NODES = {}
+local INFINITE_NEED = 1e12
+
+local panel, saves
+
+local function Status(text, kind)
+    if saves then saves:SetStatus(text, kind) end
+end
 
 local savePlans = {}
 
@@ -52,10 +59,13 @@ local function ActivateSave(saveId)
     local _, pendingNodes = NS.Core.ComputeActivationPlan(save.nodeRanks, snapshot)
     if not pendingNodes then
         NS.api:Report(NS.api:Problem("TREE.NOT_READY", { detail = L.ERR_READ_TREE }))
+        Status(L.ROW_READ_FAILED, "bad")
         return
     end
     if pendingNodes == 0 then
-        NS.api:Notify(string.format(L.MSG_ALREADY_ACTIVE, save.name))
+        local message = string.format(L.MSG_ALREADY_ACTIVE, save.name)
+        NS.api:Notify(message)
+        Status(message, "ok")
         return
     end
 
@@ -67,6 +77,7 @@ local function ActivateSave(saveId)
             local points = skillTreeFrame and skillTreeFrame.pointsText
             NS.api:Degrade(NS.api:Problem("ASHES.UNREADABLE",
                 { text = EbonAPI.Lib.stripColor(points and points:GetText() or "") }))
+            Status(L.ROW_READ_FAILED, "bad")
             return
         end
         local chosen, _, count, blocked =
@@ -74,11 +85,13 @@ local function ActivateSave(saveId)
 
         if not chosen then
             ActivationFailed(save, L.ERR_NO_GRAPH)
+            Status(L.ERR_NO_GRAPH, "bad")
             return
         end
         if count == 0 then
             NS.api:Report(NS.api:Problem("PROGRESSIVE.NOTHING_AFFORDABLE",
                 { save = save.name, balance = FormatCost(available), cost = blocked and FormatCost(blocked) or "?" }))
+            Status(blocked and string.format(L.ROW_BLOCKED, FormatCost(blocked - available)) or L.ROW_READ_FAILED, "bad")
             return
         end
 
@@ -88,16 +101,19 @@ local function ActivateSave(saveId)
     local cost, err = NS.Core.ApplyBuild(targets)
     if not cost then
         ActivationFailed(save, err)
+        Status(tostring(err), "bad")
         UI.RefreshList()
         return
     end
 
+    local message
     if partial then
-        NS.api:Notify(string.format(L.MSG_APPLIED_PARTIAL,
-            save.name, touched, FormatCost(cost), pendingNodes - touched))
+        message = string.format(L.MSG_APPLIED_PARTIAL, save.name, touched, FormatCost(cost), pendingNodes - touched)
     else
-        NS.api:Notify(string.format(L.MSG_APPLIED, save.name, touched, FormatCost(cost)))
+        message = string.format(L.MSG_APPLIED, save.name, touched, FormatCost(cost))
     end
+    NS.api:Notify(message)
+    Status(message, "ok")
     UI.RefreshList()
 end
 
@@ -126,11 +142,10 @@ local function SetWindowShift(window, shift)
 end
 
 
-local panel, tree
+local ApplyLayout
 local panelShown = false
 local refreshDriver, refreshQueued = nil, false
-local groupNodes, saveItems = {}, {}
-local seenSaves, seenGroups = {}, {}
+local affordables, seenSaves = {}, {}
 
 local function Purge(cache, seen)
     for key in pairs(cache) do
@@ -142,7 +157,10 @@ local function MarkedSaves()
     local marked = {}
     for _, entry in ipairs(NS.api:ActiveProblems()) do
         local save = entry.facts and entry.facts.save
-        if save then marked[save] = true end
+        if save then
+            local ok, text = pcall(NS.api.ProblemText, NS.api, entry)
+            marked[save] = (ok and type(text) == "string" and text ~= "") and text or entry.code or "?"
+        end
     end
     return marked
 end
@@ -173,35 +191,11 @@ local function RowTip(save, plan, affordable)
     return table.concat(lines, "\n")
 end
 
-local COST_ACTIVE = { 0.25, 1, 0.25 }
-local COST_FAILED = { 1, 0.267, 0.267 }
-local COST_BLOCKED = { 1, 0.6, 0 }
-
-local function SaveItem(saveId)
-    local item = saveItems[saveId]
-    if item then return item end
-
-    local activate = { onClick = function() ActivateSave(saveId) end }
-    local toggle = {
-        onClick = function()
-            local save = NS.Data.GetSave(saveId)
-            if save and NS.Data.SetSaveProgressive(saveId, not save.progressive) then UI.RefreshList() end
-        end,
-    }
-    local menu = { text = L.BTN_MENU, onClick = function(_, _, button) NS.Menus.ShowSaveMenu(saveId, button or panel) end }
-    item = { actions = { activate, toggle, menu } }
-    item.onEnter = function(self)
-        local save = NS.Data.GetSave(saveId)
-        local snapshot = save and NS.Core.GetTreeSnapshot()
-        if not save then return end
-        NS.View.Preview(saveId, snapshot and NS.Plan.ComputeMissing(save.nodeRanks, snapshot), self.affordable)
-    end
-    item.onLeave = function()
-        NS.Overlay.Hide()
-        NS.View.Release()
-    end
-    saveItems[saveId] = item
-    return item
+local function Clamp(value)
+    if type(value) ~= "number" or value ~= value then return 0 end
+    if value < 0 then return 0 end
+    if value > 1 then return 1 end
+    return value
 end
 
 local function FillSaveItem(saveId, snapshot, available, marked)
@@ -209,102 +203,146 @@ local function FillSaveItem(saveId, snapshot, available, marked)
     if not save then return end
 
     seenSaves[saveId] = true
-    local item = SaveItem(saveId)
-    local activate, toggle, menu = item.actions[1], item.actions[2], item.actions[3]
     local progressive = save.progressive == true
     local plan = snapshot and GetSavePlan(saveId, save, snapshot)
     local totalCost, pendingNodes = plan and plan.totalCost, plan and plan.pendingNodes
-    local canActivate, affordable, suffix, fill, color = false, nil, L.ROW_READ_FAILED, 0, COST_FAILED
+    local item = {
+        id = saveId, name = save.name, progressive = progressive, owned = 0, now = 0,
+        marked = marked[save.name], canActivate = false,
+    }
+    local affordable
 
-    if totalCost and pendingNodes == 0 then
-        suffix, fill, color = L.ROW_ACTIVE, 1, COST_ACTIVE
-    elseif totalCost then
+    if not totalCost then
+        item.state, item.text, item.need = "error", L.ROW_READ_FAILED, INFINITE_NEED
+        item.why = L.TOOLTIP_READ_FAILED
+    else
         local ownedCost, saveCost = plan.ownedCost, plan.saveCost
-        fill = (ownedCost and saveCost and saveCost > 0) and (ownedCost / saveCost) or 0
-        suffix, color = string.format(L.ROW_COST, pendingNodes, FormatCost(totalCost)), nil
+        item.owned = (ownedCost and saveCost and saveCost > 0) and Clamp(ownedCost / saveCost) or 0
+        item.nodes = { owned = plan.ownedNodes or 0, total = plan.totalNodes or 0 }
+        local total = plan.totalNodes and plan.totalNodes > 0 and plan.totalNodes or nil
 
-        if progressive then
-            local chosen, spent, count, blocked = GetProgressivePlan(plan, save, snapshot, available or 0)
-            if chosen and count > 0 then
-                affordable, canActivate = chosen, true
-                suffix = string.format(L.ROW_NEXT_STEP, count, FormatCost(spent))
-            else
-                affordable = chosen or NO_NODES
-                local short = blocked and (blocked - (available or 0))
-                if short and short > 0 then
-                    suffix, color = string.format(L.ROW_BLOCKED, FormatCost(short)), COST_BLOCKED
-                end
-            end
+        if pendingNodes == 0 then
+            item.state, item.owned, item.need, item.text = "active", 1, 0, L.ROW_ACTIVE
+            item.why = L.ROW_ACTIVE
         else
-            canActivate = available ~= nil and available >= totalCost
+            item.remaining = totalCost
+            item.text = string.format(L.ROW_COST, pendingNodes, FormatCost(totalCost))
+
+            if progressive then
+                local chosen, spent, count, blocked = GetProgressivePlan(plan, save, snapshot, available or 0)
+                if chosen and count > 0 then
+                    affordable, item.canActivate, item.state = chosen, true, "step"
+                    item.count, item.need = count, spent
+                    item.now = total and Clamp(count / total) or 0
+                    item.text = string.format(L.ROW_NEXT_STEP, count, FormatCost(spent))
+                else
+                    affordable = chosen or NO_NODES
+                    item.state, item.need = "blocked", blocked or totalCost
+                    local short = blocked and (blocked - (available or 0))
+                    if short and short > 0 then
+                        item.text = string.format(L.ROW_BLOCKED, FormatCost(short))
+                    end
+                    item.why = item.text
+                end
+            elseif available ~= nil and available >= totalCost then
+                item.state, item.canActivate, item.need = "ready", true, totalCost
+                item.now = total and Clamp(pendingNodes / total) or 0
+            else
+                item.state, item.need = "short", totalCost
+                item.why = available and string.format(L.TOOLTIP_MISSING, FormatCost(totalCost - available))
+                    or L.TOOLTIP_READ_FAILED
+            end
         end
     end
 
-    item.text, item.suffix, item.suffixColor, item.fill = save.name, suffix, color, fill
-    item.affordable = affordable
-    item.marked = marked[save.name] == true
+    affordables[saveId] = affordable
     item.tip = plan and RowTip(save, plan, affordable) or L.TOOLTIP_READ_FAILED
-    activate.text, activate.disabled = L.BTN_ACTIVATE, not canActivate
-    toggle.text, toggle.pressed = progressive and L.BTN_ON or L.BTN_OFF, progressive
-    menu.text = L.BTN_MENU
     return item
 end
 
-local function GroupNode(groupId, name, saveIds, snapshot, available, marked)
-    local key = groupId or "none"
-    seenGroups[key] = true
-    local node = groupNodes[key]
-    if not node then
-        node = { expanded = true }
-        node.onEnter = function(_, row) node.row = row end
-        node.onClick = function(_, mouse)
-            if mouse == "RightButton" then NS.Menus.ShowGroupMenu(groupId, node.row or panel) end
-        end
-        groupNodes[key] = node
-    end
+local function PanelPad()
+    return EbonAPI.Skins.value("kit.padding") or 0
+end
 
-    local children = {}
-    for i = 1, #saveIds do children[#children + 1] = FillSaveItem(saveIds[i], snapshot, available, marked) end
-    node.text, node.children = name, children
-    return node
+-- The width of the panel: the player's choice, else the skin's.
+local function PanelWidth()
+    return NS.Data.GetPanelWidth() or EbonAPI.Skins.value("widgets.saves.width")
+end
+
+function UI.GetPanelWidth()
+    return PanelWidth()
+end
+
+function UI.GetDetail()
+    return NS.Data.GetDetail() or EbonAPI.Skins.value("widgets.saves.detail")
+end
+
+function UI.GetWidget()
+    return saves
 end
 
 local function SizeTree()
-    if not (tree and panel) then return end
+    if not (saves and panel) then return end
 
-    local top, bottom = tree:GetTop(), panel:GetBottom()
-    if top and bottom and top > bottom + 8 then tree:SetHeight(top - bottom - 8) end
+    local top, bottom = saves:GetTop(), panel:GetBottom()
+    if top and bottom and top > bottom + 8 then saves:SetHeight(top - bottom - 8) end
+end
+
+local function FitWidth()
+    if not (saves and panel) then return end
+
+    local width = PanelWidth()
+    panel.spec.width = width
+    saves.spec.width = width - 2 * PanelPad()
+    saves:SetWidth(width - 2 * PanelPad())
 end
 
 function UI.RefreshList()
-    if not tree or NS.Data.IsPanelCollapsed() then return end
+    if not saves then return end
 
     local snapshot = NS.Core.GetTreeSnapshot()
     local available = NS.Core.GetAvailableSoulAshes()
     local marked = MarkedSaves()
-    local roots = {}
-    seenSaves, seenGroups = {}, {}
+    local groups = {}
+    seenSaves = {}
+
+    local function AddGroup(groupId, name, saveIds)
+        local items = {}
+        for i = 1, #saveIds do items[#items + 1] = FillSaveItem(saveIds[i], snapshot, available, marked) end
+        groups[#groups + 1] = { id = groupId, name = name, items = items }
+    end
 
     local groupIds = NS.Data.GetSortedGroupIds()
     for i = 1, #groupIds do
         local groupId = groupIds[i]
-        roots[#roots + 1] = GroupNode(groupId, NS.Data.GetGroup(groupId).name,
-            NS.Data.GetSortedSaveIdsInGroup(groupId), snapshot, available, marked)
+        AddGroup(groupId, NS.Data.GetGroup(groupId).name, NS.Data.GetSortedSaveIdsInGroup(groupId))
     end
 
     local ungrouped = NS.Data.GetSortedSaveIdsInGroup(nil)
-    if #ungrouped > 0 then
-        roots[#roots + 1] = GroupNode(nil, L.UNGROUPED, ungrouped, snapshot, available, marked)
-    end
+    if #ungrouped > 0 then AddGroup("", L.UNGROUPED, ungrouped) end
 
-    tree:SetNodes(roots)
-    Purge(saveItems, seenSaves)
+    saves:SetModel({ balance = available, groups = groups })
+    Purge(affordables, seenSaves)
     Purge(savePlans, seenSaves)
-    Purge(groupNodes, seenGroups)
     SizeTree()
 end
 
-local function ApplyLayout()
+function UI.SetDetail(detail)
+    if not NS.Data.SetDetail(detail) then return end
+    if saves then saves:SetDetail(detail or EbonAPI.Skins.value("widgets.saves.detail")) end
+end
+
+function UI.SetPanelWidth(width)
+    if not NS.Data.SetPanelWidth(width) then return end
+    FitWidth()
+    if panel then
+        panel:Refresh()
+        ApplyLayout()
+    end
+    SizeTree()
+end
+
+ApplyLayout = function()
     if not (panel and _G.skillTreeFrame) then return end
 
     local compact = NS.Data.IsCompact()
@@ -323,7 +361,9 @@ local function ApplyLayout()
         at = { frame = window, side = side, inside = false, anchor = window, insets = {} }
     end
 
-    panel:SetShaded(collapsed)
+    -- The reduced display is one line: the window takes the size of its content and keeps the same side of the tree.
+    if saves then saves:SetReduced(collapsed) end
+    panel.kitFit = collapsed
     panel:Attach(at)
     if collapsed then
         local point, relative, relativePoint, x, y = panel:GetPoint(1)
@@ -351,7 +391,7 @@ local function BuildPanel()
     if panel or not _G.skillTreeFrame then return end
 
     panel = NS.api:Window("panel", {
-        text = "SkillTreeAutoLoad", escape = false,
+        text = L.PANEL_TITLE, tip = "SkillTreeAutoLoad", escape = false, width = PanelWidth(),
         attach = { frame = GetTreeWindow(), side = NS.Data.GetPanelSide() },
         buttons = {
             { key = "BTN_PANEL_MENU", onClick = function(element) NS.Menus.ShowPanelMenu(element) end },
@@ -381,7 +421,34 @@ local function BuildPanel()
     _G.STAL_Panel = panel
     NS.View.Attach(panel)
 
-    tree = panel:Add("tree", { items = {}, emptyKey = "EMPTY_LIST" })
+    saves = panel:Add("saves", {
+        width = PanelWidth() - 2 * PanelPad(), empty = L.EMPTY_LIST,
+        view = NS.Data.GetView(), detail = NS.Data.GetDetail(),
+        sort = NS.Data.GetSort(), grouped = NS.Data.IsGrouped(),
+        onActivate = ActivateSave,
+        onMode = function(saveId)
+            local save = NS.Data.GetSave(saveId)
+            if save and NS.Data.SetSaveProgressive(saveId, not save.progressive) then UI.RefreshList() end
+        end,
+        onMenu = function(saveId, anchor) NS.Menus.ShowSaveMenu(saveId, anchor or panel) end,
+        onGroupMenu = function(groupId, anchor) NS.Menus.ShowGroupMenu(groupId, anchor or panel) end,
+        onHover = function(saveId)
+            local save = NS.Data.GetSave(saveId)
+            if not save then return end
+            local snapshot = NS.Core.GetTreeSnapshot()
+            NS.View.Preview(saveId, snapshot and NS.Plan.ComputeMissing(save.nodeRanks, snapshot), affordables[saveId])
+        end,
+        onLeave = function()
+            NS.Overlay.Hide()
+            NS.View.Release()
+        end,
+        onNew = function() NS.Menus.NewSave() end,
+        onView = function(view) NS.Data.SetView(view) end,
+        onSort = function(sort, grouped)
+            NS.Data.SetSort(sort)
+            NS.Data.SetGrouped(grouped)
+        end,
+    })
     panel:HookScript("OnSizeChanged", SizeTree)
 end
 

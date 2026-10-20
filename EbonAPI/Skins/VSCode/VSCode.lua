@@ -127,6 +127,11 @@ EbonAPI:RegisterSkin("VSCode", {
     group = { brick = "plain", padding = 0, title = 22, titleX = 0, color = "title", frame = "FLAT" },
     scroll = { width = 8, thumb = 30, trackAlpha = 0 },
     synthesis = { brick = "barItems" },
+    -- Saves: flat list, search always open; the transparent palette key stands for "no fill, no border".
+    saves = {
+      view = "list", detail = "dock", search = true,
+      row = { frame = "FLAT", fill = "headerBg", border = "headerBg" },
+    },
     output = { brick = "tree" },
   },
 

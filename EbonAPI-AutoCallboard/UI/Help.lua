@@ -25,9 +25,6 @@ local DYNAMIC = {
   targetName = function()
     return RT.state and RT.state.targetName
   end,
-  version = function()
-    return RT.GetAddonVersion()
-  end,
   latest = function()
     return (RT.GetAvailableUpdate())
   end,

@@ -383,8 +383,10 @@ function Settings.addons()
   local lines = {}
 
   for _, name in ipairs(names) do
-    local version = GetAddOnMetadata and GetAddOnMetadata(name, "Version")
-    local latest = Version.available(name)
+    -- A module follows EbonAPI's version: no number of its own, no update line.
+    local own = Modules.owns(name)
+    local version = not own and GetAddOnMetadata and GetAddOnMetadata(name, "Version")
+    local latest = not own and Version.available(name)
     local line = name
 
     if version and latest then
@@ -830,7 +832,7 @@ local function moduleCard(module, order)
     type = "group", inline = true, order = order,
     -- The card carries the module's own name, not the `.toc` title (a fixed color and the "EbonAPI - " prefix
     -- that groups the addon list): the window's colors follow the interface color.
-    name = module.version and (module.key .. " " .. module.version) or module.key,
+    name = module.key,
     args = {
       enabled = {
         type = "toggle", order = 1, name = T("UI_MODULE_ENABLE"), desc = T("UI_MODULES_DESC"),
@@ -1188,7 +1190,8 @@ local function metadata(name, field)
 end
 
 function Settings.addonTitle(name)
-  local version = metadata(name, "Version")
+  -- A module has no version of its own: the name alone.
+  local version = not Modules.owns(name) and metadata(name, "Version")
 
   return version and (name .. " " .. version) or name
 end
