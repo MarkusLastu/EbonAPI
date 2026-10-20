@@ -339,10 +339,11 @@ L.WIZARD_S6_DESC     = "You can link items, spells, and echoes in the descriptio
 L.WIZARD_S6_HINT     = "List important items, strategies, and affixes that work well with this build. You can shift-click items to link them."
 
 L.EXPORT_BUILD_TITLE = "Export Build"
-L.IMPORT_HINT        = "Paste an EbonBuilds build string, or an EBH1 composition copied from the "
-                       .. "game's Echoes window, then click Import."
-L.EBH1_LEARNED       = "composition %s(%s) learned -- %d echo(es)."
-L.EBH1_KNOWN         = "composition %salready known."
+L.IMPORT_HINT        = "Paste an EbonBuilds build string, or an EBH1 string exported from the Echo Journal "
+                       .. "(Loadouts tab), then click Import."
+L.IMPORTED_BUILD     = "Imported build"
+L.EBH1_IMPORTED      = "build \"%s\" imported (%s, %d echo(es))."
+L.EBH1_KNOWN         = "build \"%s\" was already imported."
 
 L.SYNC_REQUESTING    = "Requesting sync..."
 

@@ -317,10 +317,11 @@ L.WIZARD_S6_DESC     = "Vous pouvez insérer des liens d'objets, de sorts et d'�
 L.WIZARD_S6_HINT     = "Listez les objets, stratégies et affixes qui vont bien avec ce build. Maj+clic sur un objet pour insérer son lien."
 
 L.EXPORT_BUILD_TITLE = "Exporter le build"
-L.IMPORT_HINT        = "Collez une chaîne de build EbonBuilds, ou une composition EBH1 copiée depuis "
-                       .. "la fenêtre des Échos du jeu, puis cliquez sur Importer."
-L.EBH1_LEARNED       = "composition %s(%s) apprise -- %d Écho(s)."
-L.EBH1_KNOWN         = "composition %sdéjà connue."
+L.IMPORT_HINT        = "Collez une chaîne de build EbonBuilds, ou une chaîne EBH1 exportée depuis le Journal "
+                       .. "des Échos (onglet Loadouts), puis cliquez sur Importer."
+L.IMPORTED_BUILD     = "Build importé"
+L.EBH1_IMPORTED      = "build « %s » importé (%s, %d écho(s))."
+L.EBH1_KNOWN         = "le build « %s » est déjà importé."
 
 L.SYNC_REQUESTING    = "Demande de synchronisation..."
 

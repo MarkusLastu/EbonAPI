@@ -317,10 +317,11 @@ L.WIZARD_S6_DESC     = "Puedes enlazar objetos, hechizos y Ecos en la descripci�
 L.WIZARD_S6_HINT     = "Indica objetos, estrategias y afijos que vayan bien con este build. Mayús+clic en un objeto inserta su enlace."
 
 L.EXPORT_BUILD_TITLE = "Exportar build"
-L.IMPORT_HINT        = "Pega una cadena de build de EbonBuilds, o una composición EBH1 copiada de la "
-                       .. "ventana de Ecos del juego, y haz clic en Importar."
-L.EBH1_LEARNED       = "composición %s(%s) aprendida -- %d Eco(s)."
-L.EBH1_KNOWN         = "composición %sya conocida."
+L.IMPORT_HINT        = "Pega una cadena de build de EbonBuilds, o una cadena EBH1 exportada del Diario de "
+                       .. "Ecos (pestaña Loadouts), y haz clic en Importar."
+L.IMPORTED_BUILD     = "Build importado"
+L.EBH1_IMPORTED      = "build \"%s\" importado (%s, %d eco(s))."
+L.EBH1_KNOWN         = "el build \"%s\" ya estaba importado."
 
 L.SYNC_REQUESTING    = "Pidiendo sincronización..."
 

@@ -69,6 +69,7 @@ local function CreateMenu(column)
         MenuItem("SAVED_BUILDS",     "savedBuilds",  ShowView("savedBuilds")),
         MenuItem("PLAYER_BUILDS",    "publicBuilds", ShowView("publicBuilds")),
         MenuItem("NEW_BUILD_BUTTON", "buildWizard",  ShowView("buildWizard")),
+        MenuItem("IMPORT_BUILD",     nil,            EbonBuilds.ExportImport.ShowImportDialog),
     }
     return column:Add("list", {
         width = column.spec.width, height = #items * MENU_ROW, rowHeight = MENU_ROW, items = items,

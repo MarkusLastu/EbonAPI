@@ -320,10 +320,11 @@ L.WIZARD_S6_DESC     = "In der Beschreibung könnt Ihr Gegenstände, Zauber und 
 L.WIZARD_S6_HINT     = "Nennt Gegenstände, Strategien und Affixe, die gut zu diesem Build passen. Umschalt+Klick auf einen Gegenstand fügt seinen Link ein."
 
 L.EXPORT_BUILD_TITLE = "Build exportieren"
-L.IMPORT_HINT        = "Fügt eine EbonBuilds-Buildzeichenkette ein oder eine EBH1-Zusammenstellung "
-                       .. "aus dem Echo-Fenster des Spiels, dann klickt auf Importieren."
-L.EBH1_LEARNED       = "Zusammenstellung %s(%s) gelernt -- %d Echo(s)."
-L.EBH1_KNOWN         = "Zusammenstellung %sschon bekannt."
+L.IMPORT_HINT        = "Fügt eine EbonBuilds-Buildzeichenkette ein oder eine EBH1-Zeichenkette aus dem "
+                       .. "Echo-Journal (Reiter Loadouts), dann klickt auf Importieren."
+L.IMPORTED_BUILD     = "Importierter Build"
+L.EBH1_IMPORTED      = "Build \"%s\" importiert (%s, %d Echo(s))."
+L.EBH1_KNOWN         = "Build \"%s\" wurde schon importiert."
 
 L.SYNC_REQUESTING    = "Abgleich wird angefragt..."
 

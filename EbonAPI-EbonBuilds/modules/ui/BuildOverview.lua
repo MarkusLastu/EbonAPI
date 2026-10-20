@@ -65,25 +65,18 @@ local function ComputeMissingEchoes(build)
     local ownedLower = {}
     local ownedGroups = {}
     local spellbookIds = {}
+    -- The tabs are read whatever their name: the client translates it ("Echoes" is not the same text in every
+    -- language), and a tome is told apart by its spell id below, not by the tab that holds it.
     local numTabs = GetNumSpellTabs and GetNumSpellTabs() or 0
-    local echoTabFound = false
     for tabIdx = 1, numTabs do
-        local tabName, _, offset, numSpells = GetSpellTabInfo(tabIdx)
-        if tabName == "Echoes" then
-            echoTabFound = true
-            for slot = offset + 1, offset + numSpells do
-                local link = GetSpellLink(slot, "spell")
-                local tomeSpellId = link and tonumber(link:match("spell:(%d+)"))
-                if tomeSpellId then
-                    spellbookIds[tomeSpellId] = true
-                end
+        local _, _, offset, numSpells = GetSpellTabInfo(tabIdx)
+        for slot = offset + 1, offset + numSpells do
+            local link = GetSpellLink(slot, "spell")
+            local tomeSpellId = link and tonumber(link:match("spell:(%d+)"))
+            if tomeSpellId then
+                spellbookIds[tomeSpellId] = true
             end
-            break
         end
-    end
-
-    if not echoTabFound then
-        EbonBuilds.api:Report(EbonBuilds.api:Problem("OVERVIEW.ECHO_TAB_MISSING", { tabs = numTabs }))
     end
 
     local perkDb = EbonAPI.Ebonhold.PerkDatabase()
