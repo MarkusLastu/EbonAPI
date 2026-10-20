@@ -48,7 +48,7 @@ Every size, count and delay a developer may run into, in one place. Sizes are in
 | Control width unit | the skin's `page.unit`, 170 pixels in Azeroth, from 60 to 600 |
 | Pages remembered for back and forward | 50 |
 | Tabs open at once in the page strip | the skin's `page.strip.tabs`, 1 to 12, 1 in Azeroth. With 1, no tab is remembered. When there are more, the oldest other tab closes |
-| Kit elements | 27, listed in [Elements](elements.md) |
+| Kit elements | 28, listed in [Elements](elements.md) |
 | Kit `layout` | `VERTICAL`, `HORIZONTAL`, `GRID`, `FLOW`, `NONE` |
 | Kit `move` | `ALWAYS`, `SHIFT`, `HANDLE`, `NONE` |
 | Kit `combat` | `HIDE`, `FADE` |
@@ -66,8 +66,8 @@ Every size, count and delay a developer may run into, in one place. Sizes are in
 
 | | Limit |
 | --- | --- |
-| Skin parameters | 470, listed in [Skin parameters](skin-parameters.md): 8 player settings, 31 palette colors and 431 others |
-| Brick slots | 16 |
+| Skin parameters | 504, listed in [Skin parameters](skin-parameters.md): 8 player settings, 33 palette colors and 463 others |
+| Brick slots | 17 |
 | Colors | whole number 0x000000 to 0xFFFFFF; palette transparency 0 to 1 |
 | Contrast | `contrast.minimum` 1 to 21 (4.5 in Azeroth), `contrast.light` 0 to 1 (0.96), `contrast.dark` 0 to 1 (0.04) |
 | Skin choice | read once per session, at EbonAPI's own load: a new skin applies at the next reload of the interface |

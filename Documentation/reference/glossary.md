@@ -126,7 +126,7 @@ The words these pages use. Each has one meaning.
 : A Lua file that sets the look of the interface: its parameters, its palette and its bricks. The player picks one under **Appearance**.
 
 **Skin parameter**
-: One value a skin sets, such as `header.height`. There are 470, listed in [Skin parameters](skin-parameters.md).
+: One value a skin sets, such as `header.height`. There are 504, listed in [Skin parameters](skin-parameters.md).
 
 **State (of a dataset)**
 : The whole number that says how new a dataset is. By default, a higher state replaces a lower one.

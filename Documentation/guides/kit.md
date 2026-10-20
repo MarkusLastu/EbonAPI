@@ -5,7 +5,7 @@ Build your addon's own windows from ready-made elements. They take the look of t
 ## What it does
 
 - `api:Window` creates a window for your addon. The player moves it, and it opens at the same place next time.
-- 27 elements, from buttons to tables, go into a window, into a `group`, `panel`, `bar`, `grid` or tab page, or onto any frame of yours.
+- 28 elements, from buttons to tables, go into a window, into a `group`, `panel`, `bar`, `grid` or tab page, or onto any frame of yours.
 - Every element follows the player's skin. Give an element a translation key (the name of one of your `api:Locale` texts) instead of a text, and it changes language with the player.
 - Dialogs, menus, notifications, keyboard shortcuts and drag and drop are ready to use.
 - Secure elements cast spells, use items and run macros; EbonAPI applies the combat rules of the game for you.
@@ -150,7 +150,7 @@ local label = api:Create("text", MyAddonFrame, { key = "READY" })
 
 - `container:Add(kind, fields)` adds an element to a window, a `group`, a `panel`, a `bar`, a `grid` or a tab page, and places it. These are the containers.
 - `api:Create(kind, parent, fields)` creates an element on any frame. You place it, with `point` or with the frame's own methods. When `parent` is a Kit container, it behaves like `Add`.
-- `api:Elements()` lists the 27 kinds. Each one is described in [Elements](../reference/elements.md).
+- `api:Elements()` lists the 28 kinds. Each one is described in [Elements](../reference/elements.md).
 
 #### Fields every element takes
 
@@ -191,6 +191,127 @@ win:Add("button", {
 ```
 
 `lines:Add(text, color?, wrap?)` adds a line in the color `color` (`"text"` by default); `true` as `wrap` lets a long line break. `lines:Pair(left, right, leftColor?, rightColor?)` adds two texts on one line, `"text"` on the left and `"muted"` on the right by default. Colors are palette names, such as `"heading"`, `"text"` or `"muted"`; the full list is in [Skin parameters](../reference/skin-parameters.md#palette). An unknown color raises an error; inside a `tip` function, it is reported in the game's error display. The title of the tooltip is the text of the element.
+
+#### Saves
+
+`saves` shows a collection of saved items (a list of builds, loadouts or presets) in a narrow panel, 240 pixels wide by default. You give it data and functions; the skin draws it. Every item is a cell with a ring that shows its state and progress, its name and one button. A click on a cell chooses it and opens a drawer with the details; a double-click activates it.
+
+```lua
+local saves = panel:Add("saves", {
+  view = "grid",
+  sort = "cost",
+  grouped = false,
+  width = 240,
+  empty = "No saves yet.",
+  onActivate = function(id) Load(id) end,
+  onMenu = function(id, anchor) OpenMenu(id, anchor) end,
+  onView = function(view) MyAddonDB.view = view end,
+  onSort = function(sort, grouped) MyAddonDB.sort, MyAddonDB.grouped = sort, grouped end,
+})
+
+saves:SetModel({
+  balance = 20259189,
+  groups = {
+    {
+      id = "raid",
+      name = "Raid",
+      items = {
+        {
+          id = "a1", name = "Tank", state = "step", owned = 0.56, now = 0.07,
+          text = "Now: 91 nodes", nodes = { owned = 288, total = 512 },
+          remaining = 55400000, need = 111000, count = 91, progressive = true,
+          canActivate = true, tip = "Tank build\nNext step: 111 k",
+        },
+      },
+    },
+  },
+})
+```
+
+| Field | Default | Effect |
+| --- | --- | --- |
+| `onActivate`, `onMode`, `onMenu`, `onGroupMenu`, `onHover`, `onLeave`, `onNew`, `onSelect`, `onView`, `onSort` | | functions, all optional; see below. Anything else but a function raises `EbonAPI: MyAddon: onActivate expects a function, got <value>`. An error inside one is reported to your addon and the widget goes on |
+| `view` | the skin's `widgets.saves.view` | `"list"`, `"grid"` or `"gauge"`; anything else raises `EbonAPI: MyAddon: saves view expects list, grid or gauge, got <value>` |
+| `detail` | the skin's `widgets.saves.detail` | `"inline"` opens the drawer under the cell, `"dock"` at the bottom of the panel; the grid always uses `"dock"`. Anything else raises `EbonAPI: MyAddon: saves detail expects inline or dock, got <value>` |
+| `sort` | `"name"` | `"name"` (natural order), `"pct"` (the most acquired first) or `"cost"` (the cheapest next step first); anything else raises `EbonAPI: MyAddon: saves sort expects name, pct or cost, got <value>` |
+| `grouped` | `true` | `false` shows one list without group titles; a boolean only |
+| `width` | the skin's `widgets.saves.width` | the width the panel wants, in pixels, kept between 160 and 400 (`saves:PreferredWidth()`) |
+| `empty` | `""` | the text shown when the model holds no item; a text only |
+
+Functions of your addon:
+
+| Function | Called when |
+| --- | --- |
+| `onActivate(id)` | double-click, Enter, or the play button of a cell |
+| `onMode(id)` | the player flips the "Progressive" switch of the drawer, or presses `M` |
+| `onMenu(id, anchor)` | right-click on a cell; `anchor` is the cell, to attach your menu to |
+| `onGroupMenu(groupId, anchor)` | the player presses the dots button of a group title |
+| `onHover(id, frame)`, `onLeave()` | the mouse enters and leaves a cell (to highlight what the save touches) |
+| `onNew()` | the player presses the "+" button |
+| `onSelect(id)` | the player chooses a cell, by mouse or by keyboard |
+| `onView(view)` | the player picks another view; keep it and give it back as `view` next time |
+| `onSort(sort, grouped)` | the player picks another sort or switches the groups; keep them too |
+
+The model, given by `saves:SetModel(model)`:
+
+| Field | Meaning |
+| --- | --- |
+| `balance` | the number you have to spend, or `nil` when unknown. With `sort = "cost"` and `grouped = false`, a line "You have 20,3 M Soul Ashes" is inserted before the first item whose `need` is above `balance` |
+| `groups` | list of `{ id, name, items }`, in the order shown. A group `id` is never `""`, except for the group of the items that have none; that group is hidden when it is empty. A click on a title folds or unfolds its group |
+
+An item takes these fields:
+
+| Item field | Meaning |
+| --- | --- |
+| `id` | required, unique in the whole model, never `""` |
+| `name` | the text shown; the search ignores case and accents and also looks in the name of the group |
+| `state` | required: `"active"` (is the one in use), `"ready"` (can be activated at once), `"step"` (activated in several steps), `"short"` (too expensive: a padlock), `"blocked"` (a warning triangle) or `"error"` (unreadable: a cross) |
+| `owned` | required, the share of the total already acquired, from 0 to 1 |
+| `now` | the share more that one click would activate, from 0 to 1 |
+| `text` | the state in clear, already translated, for the drawer |
+| `nodes` | `{ owned, total }`, shown as "288 / 512 nodes" |
+| `remaining` | the cost left (a number), `nil` when active or unreadable |
+| `need` | the key of the `"cost"` sort: `0` when active, a very large number when unreadable, else the cost of the next step |
+| `count` | the number of things one activation does; the button of the drawer reads "Activate · 91" |
+| `progressive` | `true` shows a lightning bolt on the cell and sets the "Progressive" switch |
+| `marked` | a problem text: the cell gets a warning triangle and this text leads its tooltip |
+| `canActivate`, `why` | `false` hides the play button and a double-click shows `why` on the status line and in the error display |
+| `tip` | the body of the tooltip, several lines |
+
+A model that is not a table with `groups`, an item without `id`, a duplicate `id`, an unknown `state`, or an `owned` or `now` outside 0 to 1 is not drawn: the problem is reported to your addon and the widget keeps its previous model.
+
+Methods:
+
+| Method | Effect |
+| --- | --- |
+| `saves:SetModel(model)` | gives the data and redraws; keeps the chosen item if its `id` is still there, the folded groups, the scroll position and the focus |
+| `saves:SetView(view)`, `saves:SetDetail(detail)` | change the view or the drawer place, with the values of the fields above |
+| `saves:SetSort(sort, grouped)` | changes the sort; `grouped` stays as it is when `nil` |
+| `saves:SetStatus(text, kind)` | shows `text` on the status line (two lines at most) for 9 seconds; `kind` is `nil`, `"ok"` (green) or `"bad"` (red). `nil` or `""` brings back the reminder "Click: details · Double-click: activate · Right-click: menu" |
+| `saves:SetHeight(height)` | the height of the whole widget |
+| `saves:Select(id)` | chooses an item and opens its drawer; `nil` clears the choice |
+| `saves:Selected()` | the `id` of the chosen item, or `nil` |
+| `saves:Refresh()` | redraws from the model |
+| `saves:PreferredWidth()` | the width the widget wants, from `width` or the skin |
+| `saves:SetReduced(on)` | `true` folds the widget into one line (a drop-down of the items, two arrows to step through them, the play button); `false` brings the full display back. Your addon decides when, usually from a button of its own |
+| `saves:Focus()` | takes the keyboard, as a click in the widget does |
+
+The tool bar holds three buttons for the views, a magnifier, a sort button and a "+" button. The magnifier opens a field with the count of matches ("3/11") and a cross; some skins keep it open. The sort button picks name, progress or cost, and switches the groups on or off. The list shows one line per item with a small ring, the grid shows square cells, the gauge shows lines with a progress bar.
+
+The keyboard works after a click in the widget and stops when the mouse leaves it, on **Esc**, or when the widget hides, so the game keys come back:
+
+| Key | Effect |
+| --- | --- |
+| Up, Down | choose the previous or next item; in the grid, one row up or down |
+| Left, Right | in the grid only: the previous or next item |
+| Enter | activate the chosen item |
+| Space | open or close the drawer (chooses the first item when none is chosen) |
+| `M` | flip the "Progressive" switch of the chosen item |
+| Esc | closes the drawer; with the drawer closed, gives the keyboard back |
+
+The Menu key and Shift+F10 do not open the menu: it opens on a right-click on a cell, from the dots button of the drawer and from the dots button of a group title.
+
+In the search field, Up and Down change the chosen item, Enter activates it and Esc closes the field.
 
 #### Refreshing
 
@@ -384,7 +505,7 @@ These are raised as written, with your addon's name in place of `MyAddon`:
 - `EbonAPI: MyAddon: api:Window expects an id of letters, digits or _, got <id>`, and the same text with `api:SetShortcut`.
 - `EbonAPI: MyAddon: api:Window expects a table, got <type>`
 - `EbonAPI: MyAddon: scroll expects NONE, VERTICAL, HORIZONTAL or BOTH, got <value>`
-- `EbonAPI: MyAddon: unknown element "<kind>" (known: <the 27 kinds>)`
+- `EbonAPI: MyAddon: unknown element "<kind>" (known: <the 28 kinds>)`
 - `EbonAPI: MyAddon: element "<kind>" expects a table, got <type>`
 - `EbonAPI: MyAddon: a secure element cannot be created during combat`
 - `EbonAPI: MyAddon: SetOrientation expects VERTICAL, HORIZONTAL, GRID, FLOW or NONE, got <value>`
@@ -417,7 +538,7 @@ All of them are listed in [Errors](../reference/errors.md#kit).
 | | Value |
 | --- | --- |
 | Window and shortcut ids | letters, digits and `_` |
-| Element kinds | the 27 of [Elements](../reference/elements.md) |
+| Element kinds | the 28 of [Elements](../reference/elements.md) |
 | `layout` | `VERTICAL`, `HORIZONTAL`, `GRID`, `FLOW`, `NONE` |
 | `move` | `ALWAYS`, `SHIFT`, `HANDLE`, `NONE` |
 | `combat` | `HIDE`, `FADE` |

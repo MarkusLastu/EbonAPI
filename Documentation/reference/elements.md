@@ -1,6 +1,6 @@
 # Elements
 
-The 27 kinds of the [Kit](../guides/kit.md), with the fields each one takes on top of the [fields every element takes](../guides/kit.md#fields-every-element-takes) (the click fields `onClick`, `menu`, `shortcut` and `link` are listed there apart, for `button`, `secure`, `icon`, `slot` and `handle`), its callbacks and its methods. Create them with `container:Add(kind, fields)` or `api:Create(kind, parent, fields)`.
+The 28 kinds of the [Kit](../guides/kit.md), with the fields each one takes on top of the [fields every element takes](../guides/kit.md#fields-every-element-takes) (the click fields `onClick`, `menu`, `shortcut` and `link` are listed there apart, for `button`, `secure`, `icon`, `slot` and `handle`), its callbacks and its methods. Create them with `container:Add(kind, fields)` or `api:Create(kind, parent, fields)`.
 
 Sizes marked "the skin's" come from the player's skin; the value given is the one of the default skin. A **unit** is the skin's `page.unit`, 170 pixels by default.
 
@@ -46,6 +46,7 @@ api:Locale({
 | Collections | [list](#list), [tree](#tree), [table](#table) |
 | Display | [progress](#progress), [chart](#chart), [arrow](#arrow), [model](#model) |
 | Moving things | [slot](#slot), [handle](#handle) |
+| Saved items | [saves](#saves) |
 
 ## Actions
 
@@ -460,3 +461,66 @@ A round grip. Dragging it with the left button moves the window that holds it, u
 | Field | Default | Effect |
 | --- | --- | --- |
 | `size` | the skin's, 12 | width and height |
+
+## Saved items
+
+### saves
+
+A collection of saved items (builds, loadouts, presets) in a narrow panel, 240 pixels wide by default. Every item is a cell with a ring that shows its state and progress, its name and one button; a click chooses it and opens a drawer with the details, a double-click activates it. You give it data and functions; the skin draws it. The model, the item fields, the keyboard and an example are in [Saves](../guides/kit.md#saves).
+
+```lua
+local saves = panel:Add("saves", {
+  view = "list",
+  sort = "name",
+  empty = "No saves yet.",
+  onActivate = function(id) Load(id) end,
+  onMenu = function(id, anchor) OpenMenu(id, anchor) end,
+})
+saves:SetModel({ groups = { { id = "raid", name = "Raid", items = {
+  { id = "a1", name = "Tank", state = "ready", owned = 1, text = "Ready", canActivate = true },
+} } } })
+```
+
+| Field | Default | Effect |
+| --- | --- | --- |
+| `view` | the skin's `widgets.saves.view` | `"list"`, `"grid"` or `"gauge"` |
+| `detail` | the skin's `widgets.saves.detail` | `"inline"` opens the drawer under the cell, `"dock"` at the bottom of the panel; the grid always uses `"dock"` |
+| `sort` | `"name"` | `"name"`, `"pct"` or `"cost"` |
+| `grouped` | `true` | `false` shows one list without group titles |
+| `width` | the skin's `widgets.saves.width` | the width the panel wants, kept between 160 and 400 |
+| `empty` | `""` | the text shown when the model holds no item |
+
+Callbacks, all optional, called under protection (an error is reported to your addon and the widget goes on):
+
+| Callback | Called when |
+| --- | --- |
+| `onActivate(id)` | double-click, Enter, or the play button of a cell |
+| `onMode(id)` | the "Progressive" switch of the drawer, or the `M` key |
+| `onMenu(id, anchor)` | right-click on a cell, or the dots button of the drawer |
+| `onGroupMenu(groupId, anchor)` | the dots button of a group title |
+| `onHover(id, frame)`, `onLeave()` | the mouse enters and leaves a cell |
+| `onNew()` | the "+" button |
+| `onSelect(id)` | the player chooses a cell, by mouse or keyboard |
+| `onView(view)` | the player picks another view |
+| `onSort(sort, grouped)` | the player picks another sort or switches the groups |
+
+| Method | Returns | Effect |
+| --- | --- | --- |
+| `saves:SetModel(model)` | the element | gives the data and redraws; keeps the chosen item, the folded groups, the scroll and the focus |
+| `saves:SetView(view)`, `saves:SetDetail(detail)` | the element | change the view or the drawer place |
+| `saves:SetSort(sort, grouped)` | the element | changes the sort; `grouped` stays as it is when `nil` |
+| `saves:SetStatus(text, kind)` | the element | shows `text` on the status line for 9 seconds; `kind` is `nil`, `"ok"` or `"bad"` |
+| `saves:SetHeight(height)` | the element | the height of the whole widget |
+| `saves:Select(id)`, `saves:Selected()` | the element, an `id` or `nil` | chooses an item and opens its drawer; the `id` of the chosen one |
+| `saves:Refresh()` | the element | redraws from the model |
+| `saves:PreferredWidth()` | a number | the width the widget wants, from `width` or the skin |
+| `saves:SetReduced(on)` | the element | folds the widget into one line (a drop-down of the items, two arrows, the play button), or brings the full display back |
+| `saves:Focus()` | the element | takes the keyboard, as a click in the widget does |
+
+**State and model.** The model (`balance`, `groups`, the fields of an item) and the rules that refuse it are described in [Saves](../guides/kit.md#saves).
+
+**Views.** The list shows one line per item with a small ring, the grid square cells, the gauge lines with a progress bar. The tool bar holds three buttons for the views, a magnifier (a field with the count of matches and a cross), a sort button and a "+" button.
+
+**Drawer.** It shows a big ring, the name, the state in clear, "n / total nodes", the cost left, the "Progressive" switch and the activate button.
+
+**Status line.** At the bottom of the panel, two lines at most; empty, it reminds "Click: details · Double-click: activate · Right-click: menu".

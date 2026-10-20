@@ -5,10 +5,10 @@ Every value a skin can set, with the values it accepts and its value in Azeroth,
 | Section | Parameters |
 | --- | --- |
 | [Player settings](#player-settings) | 8 |
-| [Palette](#palette) | 31 |
+| [Palette](#palette) | 33 |
 | [Contrast](#contrast) | 7 |
 | [Fonts](#fonts) | 16 |
-| [Media](#media) | 13 |
+| [Media](#media) | 15 |
 | [Borders](#borders) | 15 |
 | [Window](#window) | 29 |
 | [Windows](#windows) | 8 |
@@ -19,6 +19,7 @@ Every value a skin can set, with the values it accepts and its value in Azeroth,
 | [Page](#page) | 46 |
 | [Controls](#controls) | 88 |
 | [Kit](#kit) | 85 |
+| [Saves](#saves) | 30 |
 | [Chat](#chat) | 10 |
 
 ## Player settings
@@ -73,6 +74,8 @@ The colors of the interface, by name. Elements, the Kit and other parameters ref
 | `palette.pageBg` | color `0xRRGGBB`, or `{ 0xRRGGBB, alpha }` | `{ 0x000000, 0 }` |
 | `palette.footerBg` | color `0xRRGGBB`, or `{ 0xRRGGBB, alpha }` | `{ 0x000000, 0 }` |
 | `palette.success` | color `0xRRGGBB`, or `{ 0xRRGGBB, alpha }` | `0x40FF40` |
+| `palette.caution` | color `0xRRGGBB`, or `{ 0xRRGGBB, alpha }` | `0xFF9900` |
+| `palette.well` | color `0xRRGGBB`, or `{ 0xRRGGBB, alpha }` | `{ 0x0C0C1A, 0.9 }` |
 
 ## Contrast
 
@@ -128,6 +131,8 @@ The textures EbonAPI draws with, such as the plain texture of fills, the arrow o
 | `media.grain` | texture path, or `""` for none | `"Interface\\AddOns\\EbonAPI\\Media\\Grain"` |
 | `media.circle` | texture path, or `""` for none | `"Interface\\AddOns\\EbonAPI\\Media\\Circle"` |
 | `media.chevron` | texture path, or `""` for none | `"Interface\\AddOns\\EbonAPI\\Media\\Chevron"` |
+| `media.ring` | texture path, or `""` for none | `"Interface\AddOns\EbonAPI\Media\Ring.tga"` |
+| `media.icons` | texture path, or `""` for none | `"Interface\AddOns\EbonAPI\Media\Icons.tga"` |
 | `media.sidebar` | texture path, or `""` for none | `"Interface\\AddOns\\EbonAPI\\Media\\Sidebar"` |
 | `media.error` | texture path, or `""` for none | `"Interface\\AddOns\\EbonAPI\\Media\\Error"` |
 | `media.warning` | texture path, or `""` for none | `"Interface\\AddOns\\EbonAPI\\Media\\Warning"` |
@@ -589,6 +594,43 @@ Sizes and colors of the [Kit](../guides/kit.md): margins, icons, badges, progres
 | `kit.combatAlpha` | number, 0 to 1 | `0.3` |
 | `kit.animation` | number, 0 to 2 | `0.15` |
 | `kit.rescale.delay` | number, 0 to 1 | `0.01` |
+
+## Saves
+
+The `saves` element of the Kit ([Kit](../guides/kit.md#saves)): a list of saved items drawn as rows, square cells or gauges, with a drawer for the chosen one. A skin that sets none of them inherits them from its parent. `view` and `detail` are only the starting values; the player's own choice, which the addon keeps, wins over them. In the grid the drawer is always docked. `search` keeps the search field open. `row.*` dresses the rows of the list and the gauges (`row.hover` is the hovered row, `row.selected` the chosen one), `cell.*` the cells of the grid, `group.*` the titles and the card around the items of a group (`group.upper` writes the titles in capitals), `drawer.*` the drawer. The ring of a state takes `owned` for the share acquired, `now` for the share a click would activate (and for an active save) and `later` for the lightning bolt of a progressive save; `ring.size` is the ring of a row and `ring.big` that of the drawer.
+
+| Parameter | Accepts | Default |
+| --- | --- | --- |
+| `widgets.saves.brick` | brick `saves`: `default` | "default" |
+| `widgets.saves.view` | `list`, `grid` or `gauge` | "grid" |
+| `widgets.saves.detail` | `inline` or `dock` | "dock" |
+| `widgets.saves.search` | `true` or `false` | `false` |
+| `widgets.saves.width` | whole number, 160 to 400 | `240` |
+| `widgets.saves.font` | `small`, `normal`, `large` or `button` | "normal" |
+| `widgets.saves.small.font` | `small`, `normal`, `large` or `button` | "small" |
+| `widgets.saves.row.height` | whole number, 20 to 48 | `28` |
+| `widgets.saves.row.gap` | whole number, 0 to 10 | `2` |
+| `widgets.saves.row.frame` | `FLAT`, `LARGE`, `SMALL` | "FLAT" |
+| `widgets.saves.row.fill` | palette name | "well" |
+| `widgets.saves.row.border` | palette name | "borderDim" |
+| `widgets.saves.row.hover` | palette name | "rowHover" |
+| `widgets.saves.row.selected` | palette name | "selected" |
+| `widgets.saves.cell.size` | whole number, 36 to 80 | `50` |
+| `widgets.saves.cell.gap` | whole number, 0 to 12 | `5` |
+| `widgets.saves.cell.frame` | `FLAT`, `LARGE`, `SMALL` | "SMALL" |
+| `widgets.saves.cell.fill` | palette name | "card" |
+| `widgets.saves.group.frame` | `FLAT`, `LARGE`, `SMALL` | "FLAT" |
+| `widgets.saves.group.fill` | palette name | "card" |
+| `widgets.saves.group.color` | palette name | "heading" |
+| `widgets.saves.group.upper` | `true` or `false` | `false` |
+| `widgets.saves.drawer.frame` | `FLAT`, `LARGE`, `SMALL` | "SMALL" |
+| `widgets.saves.drawer.fill` | palette name | "well" |
+| `widgets.saves.drawer.border` | palette name | "borderDim" |
+| `widgets.saves.owned` | palette name | "heading" |
+| `widgets.saves.now` | palette name | "success" |
+| `widgets.saves.later` | palette name | "caution" |
+| `widgets.saves.ring.size` | whole number, 12 to 32 | `18` |
+| `widgets.saves.ring.big` | whole number, 24 to 64 | `38` |
 
 ## Chat
 

@@ -66,7 +66,7 @@ Every service hangs off the handle returned by `EbonAPI:NewAddon`. Use only the 
 | 🌍 Localization | One language for every addon, English fallback, self-refreshing widgets | [Localization](guides/localization.md) |
 | 🔌 Connection | Your icon and project link, your card in the EbonAPI window, links opened for the player | [Connecting your addon](guides/connection.md) |
 | 🪟 Interface | Your settings in the EbonAPI window, shared appearance parameters for your own | [Interface](guides/interface.md) |
-| 🧱 Kit | Windows and 27 elements for your own interface, dialogs, menus, notifications, shortcuts | [Kit](guides/kit.md) |
+| 🧱 Kit | Windows and 28 elements for your own interface, dialogs, menus, notifications, shortcuts | [Kit](guides/kit.md) |
 | 🧭 Minimap button | A button around the minimap that the player places, groups or hides | [Minimap button](guides/minimap.md) |
 | 🎨 Skins | The whole look of the interface, chosen by the player, written in a Lua file | [Skins](guides/skins.md) |
 | 🛰️ Server bridge | Server messages by opcode (the number that names a kind of message), parsed run state, throttled requests | [Server](guides/server.md) |
@@ -84,7 +84,7 @@ Every service hangs off the handle returned by `EbonAPI:NewAddon`. Use only the 
 | --- | --- |
 | [Handle](reference/handle.md) | Every method of the handle, grouped by service |
 | [Events catalog](reference/events.md) | Every event, its arguments, and whether it is sticky |
-| [Elements](reference/elements.md) | The 27 elements of the Kit, their fields and methods |
+| [Elements](reference/elements.md) | The 28 elements of the Kit, their fields and methods |
 | [Skin parameters](reference/skin-parameters.md) | Every parameter a skin can set |
 | [Modules](reference/modules.md) | `EbonAPI.State`, `EbonAPI.Ebonhold`, `EbonAPI.Profile`, `EbonAPI.Format`, `EbonAPI.Lib`, opcodes, constants |
 | [Limits](reference/limits.md) | Every size, count and delay, in one table |

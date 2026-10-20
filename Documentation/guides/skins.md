@@ -53,7 +53,7 @@ EbonAPI:RegisterSkin("B", { ["header.title.align"] = "SIDE" })
 
 Two keys are not skin parameters: `parent` and `bricks`. Every other key is a skin parameter name, or the start of one.
 
-Skin parameter names are in English and never translated. [Skin parameters](../reference/skin-parameters.md) lists all 470 skin parameters, with the values each one accepts and its value in the default skin.
+Skin parameter names are in English and never translated. [Skin parameters](../reference/skin-parameters.md) lists all 504 skin parameters, with the values each one accepts and its value in the default skin.
 
 | Kind | Written as |
 | --- | --- |
@@ -129,11 +129,14 @@ The interface is built from bricks, one kind per **slot**. Each slot has a param
 | `input` | `widgets.input.brick` | `default` | `native` |
 | `heading` | `widgets.heading.brick` | `default` | `default` |
 | `text` | `widgets.text.brick` | `default` | `default` |
+| `saves` | `widgets.saves.brick` | `default` | `default` |
 | `group` | `widgets.group.brick` | `card`, `plain`, `line` | `card` |
 | `scroll` | `widgets.scroll.brick` | `default` | `default` |
 | `minimap` | `kit.minimap.brick` | `flat` | `native` |
 
 The `native` bricks are Azeroth's own; a skin that starts from Azeroth can choose them by name. A skin also reaches the bricks of its parents by name. Porcelain adds `lights` to the `close` slot.
+
+The `saves` slot is the whole `saves` element of the [Kit](kit.md#saves): the brick is the widget itself, and `default` builds the one that EbonAPI draws from the `widgets.saves.*` parameters, which most skins only tune. The view a skin sets is the starting one; the player's choice, which your addon keeps, wins over it.
 
 #### Your own bricks
 
@@ -182,6 +185,7 @@ A brick is a function `(parent, B)` that builds a widget on `parent` and returns
 | `input` | `SetTitle(text)`, `SetLines(count)`, `SetValue(text)`, `SetDisabledState(state)` | | `self.onCommit(text)` when the player validates the text or leaves the field |
 | `heading` | `SetLabel(text)` | | |
 | `text` | `SetContent(text, width, size, color)` | | |
+| `saves` | `SetModel(model)`, `SetView(view)`, `SetDetail(detail)`, `SetSort(sort, grouped)`, `SetStatus(text, kind)`, `SetHeight(height)`, `SetWidth(width)`, `Select(id)`, `Selected()`, `Refresh()`, `PreferredWidth()` | | `self.spec.onActivate(id)`, `onMode(id)`, `onMenu(id, anchor)`, `onGroupMenu(groupId, anchor)`, `onHover(id, frame)`, `onLeave()`, `onNew()`, `onSelect(id)`, `onView(view)`, `onSort(sort, grouped)`, each only when `self.spec` has it (the Kit sets `spec` and `owner`) |
 | `group` | `SetLabel(text)`, `SetInnerHeight(height)` | `box`, the frame that holds the content | |
 | `scroll` | `SetMode(mode)`, `SetView(width, height)`, `SetContentHeight(height)`, `SetContentWidth(width)`, `Offset()`, `SetOffset(value)`, `HorizontalOffset()`, `SetHorizontalOffset(value)`, `Wheel(delta, horizontal)` | `child`, the scrolled frame; `bar`, `hbar`, the two bars | |
 | `minimap` | | `icon` | |
@@ -234,9 +238,9 @@ The parameters the player changes are read with `api:GetParameter`, see [Interfa
 
 | | Value |
 | --- | --- |
-| Skin parameters | 470, listed in [Skin parameters](../reference/skin-parameters.md) |
-| Palette colors | 31 |
-| Brick slots | 16 |
+| Skin parameters | 504, listed in [Skin parameters](../reference/skin-parameters.md) |
+| Palette colors | 33 |
+| Brick slots | 17 |
 | Parameters the player changes | 8 |
 | Color | a whole number from `0x000000` to `0xFFFFFF`; the alpha of a palette color, from 0 to 1 |
 | `contrast.minimum` | 1 to 21, 4.5 in Azeroth |
