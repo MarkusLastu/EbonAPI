@@ -9,14 +9,11 @@ local state = RT.state
 local BOARD_TARGET_PRIMARY_NAMES = { "Objectives Board", "Objective Board" }
 local BOARD_OBJECT_IDS = { [600600] = true }
 local ACCEPT_WINDOW = 12
-local INTERACT_DELAY = 1.25
 
 local callboardActiveUntil
 local fallbackCooldownUntil
-local pendingInteractAt
 local pendingAcceptUntil
 local UpdateSummonStatus
-local TargetCallboard
 local QueueCallboardFollowup
 
 local SyncCallboardActiveFromCooldown
@@ -719,57 +716,9 @@ function RT.MarkObjectiveBoardClosed(source)
   end
 end
 
-TargetCallboard = function()
-  local name = state and state.targetName
-
-  if not name or name == "" then
-    return nil, RT.api:Problem("CALLBOARD.TARGET_NOT_SET")
-  end
-
-  local targetByName = rawget(_G, "TargetByName")
-  if targetByName then
-    targetByName(name, true)
-  end
-
-  if UnitExists("target") and UnitName("target") == name then
-    return true, name
-  end
-
-  return nil, RT.api:Problem("CALLBOARD.TARGET_NOT_FOUND", { targetName = name })
-end
-
-local function TryInteract()
-  local source = RT.pendingInteractSource
-  pendingInteractAt = nil
-  RT.pendingInteractSource = nil
-
-  local targeted, targetName = TargetCallboard()
-  if not targeted then
-    RT.api:Report(targetName)
-    RT.SetManualBoardOpenRequired(source)
-    return
-  end
-
-  pendingAcceptUntil = GetTime() + ACCEPT_WINDOW
-
-  if InteractUnit then
-    InteractUnit("target")
-  else
-    RT.api:Notify(string.format(L.TARGETED_QUEST_PROMPT, targetName))
-  end
-end
-
 QueueCallboardFollowup = function(source)
   pendingAcceptUntil = GetTime() + ACCEPT_WINDOW
   RT.api:Trace("summon_followup", source)
-
-  if TargetCallboard() then
-    TryInteract()
-    return
-  end
-
-  pendingInteractAt = GetTime() + INTERACT_DELAY
-  RT.pendingInteractSource = source
 end
 
 function RT.GetCallboardActiveRemaining()
@@ -791,12 +740,6 @@ function RT.ClearPendingAcceptUntil()
   pendingAcceptUntil = nil
 end
 
-function RT.RunPendingInteract(now)
-  if pendingInteractAt and now >= pendingInteractAt then
-    TryInteract()
-  end
-end
-
 RT.IsCallboardActive = IsCallboardActive
 RT.GetSummonCooldownRemaining = GetSummonCooldownRemaining
 RT.GetFallbackCooldownRemaining = GetFallbackCooldownRemaining
@@ -805,12 +748,10 @@ RT.GetObjectivesService = GetObjectivesService
 RT.GetCurrentObjectives = GetCurrentObjectives
 RT.GetActiveObjective = GetActiveObjective
 RT.SyncCallboardActiveFromCooldown = SyncCallboardActiveFromCooldown
-RT.TargetCallboard = TargetCallboard
 RT.QueueCallboardFollowup = QueueCallboardFollowup
 RT.MarkCallboardSummoned = MarkCallboardSummoned
 
 function RT.ClearPendingInteract()
-  pendingInteractAt = nil
   pendingAcceptUntil = nil
 end
 

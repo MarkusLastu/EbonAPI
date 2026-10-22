@@ -829,7 +829,37 @@ local function fillButton(parent)
   return button
 end
 
+-- The skin's own button brick for a secure button, when that brick takes the template and the name (it then
+-- marks its widget secureOk). Without it the secure button wears the flat dressed look.
+function Bricks.createSecure(slot, parent, template, name)
+  local build = Skins.brick(slot, S(Catalog.slotKey(slot)))
+
+  if not build then
+    return nil
+  end
+
+  local ok, widget = pcall(build, parent, Bricks, template, name)
+
+  if ok and type(widget) == "table" and widget.secureOk and not breach(widget, slot) then
+    return widget
+  end
+
+  if ok and type(widget) == "table" and widget.Hide then
+    widget:Hide()
+  end
+
+  return nil
+end
+
 function Bricks.dressedButton(parent, template, name)
+  local native = template and Bricks.createSecure("button", parent, template, name)
+
+  if native then
+    native:Visual()
+
+    return native
+  end
+
   local button = baseButton(parent, fillVisual, template, name)
 
   Bricks.frame(button, "small", "button", "buttonBorder")

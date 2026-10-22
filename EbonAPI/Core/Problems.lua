@@ -135,7 +135,6 @@ local function versionOf(addon)
   local version = versions[addon]
 
   if version == nil then
-    -- A module has no version of its own: it is EbonAPI's.
     local Modules = EbonAPI.ModuleLoader
 
     if Modules and Modules.owns(addon) then

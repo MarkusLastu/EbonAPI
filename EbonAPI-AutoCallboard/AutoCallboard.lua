@@ -169,7 +169,6 @@ local nextTickAt
 local ACTIVE_INTERVAL = 0.066
 local IDLE_INTERVAL = 0.25
 
-local RunPendingInteract = RT.RunPendingInteract
 local UpdateQuestPanelAnimation = RT.UpdateQuestPanelAnimation
 local UpdateBrowserAnimations = RT.UpdateBrowserAnimations
 local ProcessRolling = RT.ProcessRolling
@@ -225,7 +224,6 @@ local function Tick()
     nextTickAt = now + (Awake() and ACTIVE_INTERVAL or IDLE_INTERVAL)
   end
 
-  RunPendingInteract(now)
   UpdateQuestPanelAnimation()
   UpdateBrowserAnimations()
   ProcessRolling()

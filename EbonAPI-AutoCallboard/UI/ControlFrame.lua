@@ -9,7 +9,6 @@ local IsSummonSpellUsable = RT.IsSummonSpellUsable
 local GetSummonCooldownRemaining = RT.GetSummonCooldownRemaining
 local GetObjectivesService = RT.GetObjectivesService
 local CaptureCurrentObjectives = RT.CaptureCurrentObjectives
-local TargetCallboard = RT.TargetCallboard
 local QueueCallboardFollowup = RT.QueueCallboardFollowup
 local UpdateSummonStatus = RT.UpdateSummonStatus
 local state = RT.state
@@ -576,12 +575,7 @@ local function CreateSummonButton(anchor)
     elseif preClickCooldownRemaining and preClickCooldownRemaining > 0 then
       RT.api:Report(RT.api:Problem("CONTROL.SUMMON_ON_COOLDOWN", { cooldown = math.ceil(preClickCooldownRemaining) }))
     elseif not preClickWasUsable then
-      if TargetCallboard() then
-        RT.api:Trace("summon_target_existing")
-        QueueCallboardFollowup("button summoned callboard")
-      else
-        RT.api:Report(RT.api:Problem("CONTROL.SUMMON_UNUSABLE", { spell = RT.GetSummonSpellName(), target = tostring(state.targetName or "") }))
-      end
+      RT.api:Report(RT.api:Problem("CONTROL.SUMMON_UNUSABLE", { spell = RT.GetSummonSpellName(), target = tostring(state.targetName or "") }))
     else
       RT.BeginSummonAttempt("secure button")
     end

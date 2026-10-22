@@ -3,7 +3,7 @@ local PANEL = "Interface\\Buttons\\UI-Panel-Button-"
 local SLICES = { { 0, 0.09375 }, { 0.09375, 0.53125 }, { 0.53125, 0.625 } }
 local CAP = 12
 
-local function panelButton(parent, B)
+local function panelButton(parent, B, template, name)
   local button = B.baseButton(parent, function(self)
     local state = "Up"
     local text = self.hovered and "text" or "heading"
@@ -28,8 +28,9 @@ local function panelButton(parent, B)
 
     B.paint(self.label, "SetTextColor", text)
     B.labelFont(self, text)
-  end)
+  end, template, name)
 
+  button.secureOk = true
   button.role = "normal"
   button.parts = {}
 
@@ -83,7 +84,7 @@ EbonAPI:RegisterSkin("Azeroth", {
   locked = false,
 
   palette = {
-    bg = 0xFFFFFF,
+    bg = 0x000000,
     bgSoft = { 0x0C0C1A, 0.9 },
     well = { 0x0C0C1A, 0.9 },
     card = { 0x191919, 0.6 },
