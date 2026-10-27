@@ -14,7 +14,8 @@ local function CharacterName(key)
 end
 
 function RT.GetAccountProfile()
-  if type(state.accountProfile) ~= "table" or type(state.accountProfile.savedSelections) ~= "table" then
+  if type(state.accountProfile) ~= "table" or type(state.accountProfile.savedSelections) ~= "table"
+      or not Core.findSelection(state.accountProfile, Core.WORLD_TOUR_SELECTION_ID) then
     state.accountProfile = Core.copyAccountProfile(state.accountProfile)
   end
 
@@ -89,6 +90,7 @@ function RT.SetActiveSelectionId(id)
 
   if entry and entry.activeSelectionId ~= id then
     entry.activeSelectionId = id
+    RT.ResetWorldTourProgress()
     RT.TouchState()
     RT.RefreshQuestWindow()
   end

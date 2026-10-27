@@ -751,6 +751,7 @@ local function AddCollectionItems(menu, quest, key, groupId)
 
     menu:AddItem(entry.name, {
       checked = inside,
+      disabled = entry.id == Core.WORLD_TOUR_SELECTION_ID,
       keepOpen = true,
       onClick = function()
         RT.RequestSetQuestInSelection(entry, key, not inside)
