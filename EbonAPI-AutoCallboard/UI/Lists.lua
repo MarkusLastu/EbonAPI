@@ -423,6 +423,16 @@ BuildSelectionContextMenu = function(menu, entry)
   menu:Reset()
   menu:AddItem(entry.name, { header = true })
 
+  if entry.id == Core.WORLD_TOUR_SELECTION_ID then
+    menu:AddItem(L.LISTS_MENU_DIFFICULTY, {
+      arrow = true,
+      keepOpen = true,
+      onClick = function() BuildDifficultySubmenu(menu, entry) end,
+    })
+    menu:Layout()
+    return
+  end
+
   if Core.groupCount(AccountProfile()) > 0 then
     menu:AddItem(L.LISTS_MENU_MOVE_TO, {
       arrow = true,
@@ -498,6 +508,10 @@ local function RowTooltip(row, entry)
     end
   end
 
+  if entry.id == Core.WORLD_TOUR_SELECTION_ID then
+    GameTooltip:AddLine(L.WORLD_TOUR_TOOLTIP, 0.85, 0.78, 1, true)
+  end
+
   if RT.IsRolling() then
     GameTooltip:AddLine(L.LISTS_ROW_STOP_TO_SWITCH, 1, 0.4, 0.4)
   elseif RT.IsSelectionActive(entry) then
@@ -562,7 +576,7 @@ local browser = RT.BuildBrowser({
       RT.RequestLoadSelection(entry)
     end
   end,
-  canDrag = function(entry) return entry.id ~= nil end,
+  canDrag = function(entry) return entry.id ~= nil and entry.id ~= Core.WORLD_TOUR_SELECTION_ID end,
   entryGroup = function(entry) return entry.groupId end,
   dropRefused = function(groupId) return Core.selectionsFull(AccountProfile(), groupId) end,
   moveEntry = function(id, groupId, beforeId)

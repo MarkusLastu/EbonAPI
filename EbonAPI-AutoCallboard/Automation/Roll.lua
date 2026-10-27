@@ -499,6 +499,10 @@ local function ResumeAfterSelectedQuest(source)
   local abandoned = SelectedQuestWasAbandoned()
   local instanceSignature = selectedQuest and selectedQuest.instanceSignature
 
+  if not abandoned and selectedQuest then
+    RT.CheckWorldTourProgress(tonumber(selectedQuest.questId))
+  end
+
   if not abandoned and selectedQuest and selectedQuest.key then
     local target = RT.RefreshCurrentInstanceQuestTarget("resume")
 

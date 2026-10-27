@@ -416,11 +416,38 @@ function Core.copyRouteList(list)
   return copyEach(list, Core.copyRoute)
 end
 
+Core.WORLD_TOUR_SELECTION_ID = -1
+
+local function CopySavedSelections(selections)
+  local copy = Core.copySelectionList(selections)
+  local difficulty
+
+  for index = #copy, 1, -1 do
+    if copy[index].id == Core.WORLD_TOUR_SELECTION_ID then
+      difficulty = copy[index].difficulty
+      table.remove(copy, index)
+    end
+  end
+
+  table.insert(copy, 1, {
+    id = Core.WORLD_TOUR_SELECTION_ID,
+    name = "World Tour",
+    difficulty = difficulty,
+    desiredQuests = {
+      ["id:600602"] = true,
+      ["id:600600"] = true,
+      ["id:600601"] = true,
+    },
+  })
+
+  return copy
+end
+
 function Core.copyAccountProfile(profile)
   local source = type(profile) == "table" and profile or {}
 
   return {
-    savedSelections = Core.copySelectionList(source.savedSelections),
+    savedSelections = CopySavedSelections(source.savedSelections),
     groups = Core.copyGroupList(source.groups),
     nextSelectionNumber = positiveNumber(source.nextSelectionNumber),
     nextGroupNumber = positiveNumber(source.nextGroupNumber),
@@ -533,15 +560,25 @@ local Selections = Core.buildContainer({
   maxGroups = function() return Core.MAX_GROUPS end,
 })
 
+local function UserSelectionChange(change)
+  return function(profile, id, ...)
+    if id == Core.WORLD_TOUR_SELECTION_ID then
+      return profile, false
+    end
+
+    return change(profile, id, ...)
+  end
+end
+
 Core.selectionsInContainer = Selections.itemsIn
 Core.selectionCount = Selections.count
 Core.selectionsFull = Selections.full
 Core.peekNextSelectionName = Selections.peekNextName
 Core.findSelection = Selections.find
-Core.renameSelection = Selections.rename
-Core.deleteSelection = Selections.delete
-Core.setSelectionGroup = Selections.setGroup
-Core.moveSelectionTo = Selections.moveTo
+Core.renameSelection = UserSelectionChange(Selections.rename)
+Core.deleteSelection = UserSelectionChange(Selections.delete)
+Core.setSelectionGroup = UserSelectionChange(Selections.setGroup)
+Core.moveSelectionTo = UserSelectionChange(Selections.moveTo)
 Core.findGroupIndex = Selections.findGroupIndex
 Core.findGroup = Selections.findGroup
 Core.groupCount = Selections.groupCount
@@ -562,6 +599,10 @@ function Core.setSelectionDifficulty(profile, id, tier)
 end
 
 function Core.updateSelectionContent(profile, id, desiredQuests)
+  if id == Core.WORLD_TOUR_SELECTION_ID then
+    return profile, false
+  end
+
   return Selections.update(profile, id, { desiredQuests = Core.copyDesiredMap(desiredQuests) })
 end
 
@@ -574,6 +615,10 @@ function Core.selectionHasQuest(selection, key)
 end
 
 function Core.setQuestInSelection(profile, id, key, wanted)
+  if id == Core.WORLD_TOUR_SELECTION_ID then
+    return profile, false
+  end
+
   if type(key) ~= "string" or key == "" then
     return profile, nil, Core.makeProblem("SELECTION.QUEST_KEY_INVALID", { key = tostring(key) })
   end

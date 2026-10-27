@@ -104,6 +104,7 @@ local function SetUpCharacter()
 
   RT.RunAccountMigration(characterProfileKey)
   RT.ApplyCharacterState()
+  RT.ResetWorldTourProgress()
 end
 
 local function CommitStateChange()
@@ -192,6 +193,7 @@ RT.api:Tick("objectives", 0.5, RT.WatchCurrentObjectives)
 RT.api:Tick("overlays", 0.5, RT.SyncOverlayFrameLevels)
 RT.api:Tick("speed", 0.2, RT.RefreshSpeedDisplay)
 RT.api:Tick("routeShare", 1, function() RT.ProcessRouteShare() end)
+RT.api:Tick("worldTour", 0.25, function() RT.CheckWorldTourProgress() end)
 
 local function WakeIndoorCheck()
   indoorTask.nextAt = nil
@@ -354,7 +356,10 @@ EVENTS.PLAYER_REGEN_DISABLED = function()
   RT.RefreshEchoBar()
 end
 
-EVENTS.PLAYER_REGEN_ENABLED = EVENTS.PLAYER_REGEN_DISABLED
+EVENTS.PLAYER_REGEN_ENABLED = function()
+  RT.RefreshEchoBar()
+  RT.CheckWorldTourProgress()
+end
 
 EVENTS.PLAYER_LOGOUT = function()
   RT.FlushQuestStateBackup()
@@ -426,6 +431,7 @@ EVENTS.QUEST_TURNED_IN = function(arg1)
   local questID = tonumber(arg1) or 0
   local selected = RT.GetSelectedQuest()
 
+  RT.CheckWorldTourProgress(questID)
   CheckEternalQuest("QUEST_TURNED_IN", true)
 
   if selected and questID > 0 and tonumber(selected.questId) == questID then
@@ -448,6 +454,7 @@ EVENTS.QUEST_ACCEPTED = function(arg1, arg2)
 end
 
 EVENTS.QUEST_LOG_UPDATE = function()
+  RT.CheckWorldTourProgress()
   RT.WatchRouteQuestLog()
   RT.RefreshLastAcceptedQuest()
   RT.ResetSelectedQuestCheck()
