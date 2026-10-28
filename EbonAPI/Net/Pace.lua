@@ -320,8 +320,12 @@ local function tick()
 
   observe(length)
 
+  local ctl = _G.ChatThrottleLib
+
   if failing() then
     backOff(rate)
+  elseif ctl and ctl.bQueueing then
+    since = 0
   elseif now() >= holdUntil then
     decide(rate)
   end

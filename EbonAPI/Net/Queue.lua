@@ -1137,6 +1137,13 @@ end
 -- of the game lasts longer than the interval: the time elapsed since the last tick says how many
 -- messages are due, and at most BURST_MAX leave in one frame.
 local function drain()
+  local ctl = _G.ChatThrottleLib
+
+  -- CTL users (WIM, Ace addons) stall while our traffic keeps its budget negative.
+  if ctl and ctl.bQueueing then
+    return
+  end
+
   local count = 1
 
   if SEND_INTERVAL < Queue.BURST_BELOW then
